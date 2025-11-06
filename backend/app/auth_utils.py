@@ -15,8 +15,9 @@ SECRET_KEY = "your-super-secret-key"  # CHANGE THIS!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing configuration - use pbkdf2_sha256 as primary (no 72-byte limit), bcrypt as fallback
+# pbkdf2_sha256 is listed first to be the default, and bcrypt is kept for backward compatibility
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -31,10 +32,34 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def get_password_hash(password: str):
-    return pwd_context.hash(password)
+    """
+    Hash password using pbkdf2_sha256 (no 72-byte limit like bcrypt).
+    Supports passwords of any length.
+    """
+    # Use pbkdf2_sha256 explicitly to avoid bcrypt's 72-byte limit
+    # This ensures we can handle passwords of any length
+    try:
+        # Create a context specifically for pbkdf2_sha256 hashing
+        pbkdf2_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+        return pbkdf2_context.hash(password)
+    except Exception as e:
+        # Fallback to the main context if there's an issue
+        import logging
+        logging.warning(f"pbkdf2_sha256 hashing failed, using fallback: {e}")
+        return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str):
-    return pwd_context.verify(plain_password, hashed_password)
+    """
+    Verify password against hash. Supports both bcrypt and pbkdf2_sha256 hashes.
+    """
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        # If hash format is invalid or unrecognized, try to handle it gracefully
+        # This can happen if the hash was stored incorrectly
+        import logging
+        logging.warning(f"Password verification failed: {e}")
+        return False
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(

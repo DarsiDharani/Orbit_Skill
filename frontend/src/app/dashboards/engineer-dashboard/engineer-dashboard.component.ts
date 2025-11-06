@@ -77,6 +77,32 @@ export interface Assignment {
   title: string;
   description: string;
   questions: AssignmentQuestion[];
+  sharedAssignmentId?: number;
+}
+
+export interface UserAnswer {
+  questionIndex: number;
+  type: string;
+  selectedOptions: number[];
+  textAnswer?: string;
+}
+
+export interface QuestionResult {
+  questionIndex: number;
+  isCorrect: boolean;
+  correctAnswers: number[];
+  userAnswers: number[];
+  userTextAnswer?: string;
+}
+
+export interface AssignmentResult {
+  id: number;
+  training_id: number;
+  score: number;
+  total_questions: number;
+  correct_answers: number;
+  question_results: QuestionResult[];
+  submitted_at: string;
 }
 
 
@@ -197,9 +223,14 @@ export class EngineerDashboardComponent implements OnInit {
 
   // --- Trainings & Catalog ---
   allTrainings: TrainingDetail[] = [];
+  private _myTrainingsCache: TrainingDetail[] = [];
+  private _myTrainingsCacheKey: string = '';
   assignedTrainings: TrainingDetail[] = [];
   dashboardUpcomingTrainings: TrainingDetail[] = [];
   trainingRequests: TrainingRequest[] = [];
+  assignmentSubmissionStatus: Map<number, boolean> = new Map(); // Track which trainings have submitted assignments
+  assignmentScores: Map<number, number> = new Map(); // Track scores for each training
+  feedbackSubmissionStatus: Map<number, boolean> = new Map(); // Track which trainings have submitted feedback
   trainingSearch: string = '';
   trainingSkillFilter: string = 'All';
   trainingLevelFilter: string = 'All';
@@ -228,6 +259,10 @@ export class EngineerDashboardComponent implements OnInit {
   isTrainer: boolean = false;
   trainerZoneView: 'overview' | 'assignmentForm' | 'feedbackForm' = 'overview';
   showScheduleTrainingModal: boolean = false;
+  sharedAssignments: Map<number, boolean> = new Map(); // Track which trainings have assignments shared
+  sharedFeedback: Map<number, boolean> = new Map(); // Track which trainings have feedback shared
+  assignmentSharedBy: Map<number, string> = new Map(); // Track who shared the assignment
+  feedbackSharedBy: Map<number, string> = new Map(); // Track who shared the feedback
   newTraining = {
     division: '',
     department: '',
@@ -465,7 +500,7 @@ export class EngineerDashboardComponent implements OnInit {
     this.http.get<any>(this.API_ENDPOINT, { headers }).pipe(
       map(response => {
         this.employeeId = response.username;
-        this.employeeName = response.employee_name || 'Likhitha Pilli';
+        this.employeeName = response.employee_name || 'Employee';
         this.userName = this.employeeName || this.employeeId;
         this.skills = response.skills;
         this.isTrainer = response.employee_is_trainer || false;
@@ -484,11 +519,11 @@ export class EngineerDashboardComponent implements OnInit {
           this.router.navigate(['/login']);
         } else {
           // Mock data for display purposes if API fails
-          this.employeeName = 'Likhitha Pilli';
-          this.userName = 'Likhitha Pilli';
-          this.employeeId = 'user123';
+          this.employeeName = 'Employee';
+          this.userName = 'Employee';
+          this.employeeId = 'employee';
           this.processDashboardData(); // Will use default values
-          this.dashboardUpcomingTrainings = [{ id: 1, training_name: 'Advanced Python', training_date: '2025-10-15', time: '10:00 AM', trainer_name: 'Jane Doe', training_type: 'Online' }];
+          this.dashboardUpcomingTrainings = [{ id: 1, training_name: 'Sample Training', training_date: '2025-10-15', time: '10:00 AM', trainer_name: 'Manager', training_type: 'Online' }];
           this.errorMessage = `Failed to load live data. Displaying sample data.`;
         }
         this.isLoading = false;
@@ -548,6 +583,9 @@ export class EngineerDashboardComponent implements OnInit {
     this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
       next: (response) => {
         this.allTrainings = response;
+        // Clear cache when trainings are updated
+        this._myTrainingsCache = [];
+        this._myTrainingsCacheKey = '';
         this.allTrainingsCalendarEvents = this.allTrainings
             .filter(t => t.training_date)
             .map(t => ({
@@ -578,8 +616,113 @@ export class EngineerDashboardComponent implements OnInit {
             }));
         this.generateCalendar();
         this.processDashboardTrainings();
+        // Check submission status for all assigned trainings
+        this.checkSubmissionStatuses();
       }
     });
+  }
+
+  checkSubmissionStatuses(): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    // Check assignment submission status for each training
+    this.assignedTrainings.forEach(training => {
+      this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+        next: (result: any) => {
+          if (result) {
+            this.assignmentSubmissionStatus.set(training.id, true);
+            this.assignmentScores.set(training.id, result.score || 0);
+          }
+        },
+        error: (err) => {
+          // No result found means not submitted yet
+          this.assignmentSubmissionStatus.set(training.id, false);
+          this.assignmentScores.set(training.id, 0);
+        }
+      });
+    });
+  }
+
+  isAssignmentSubmitted(trainingId: number): boolean {
+    return this.assignmentSubmissionStatus.get(trainingId) || false;
+  }
+
+  isAssignmentCompleted(trainingId: number): boolean {
+    // Assignment is completed only if score is 100%
+    const score = this.assignmentScores.get(trainingId) || 0;
+    return score === 100;
+  }
+
+  getAssignmentScore(trainingId: number): number {
+    return this.assignmentScores.get(trainingId) || 0;
+  }
+
+  isFeedbackSubmitted(trainingId: number): boolean {
+    return this.feedbackSubmissionStatus.get(trainingId) || false;
+  }
+
+  isAssignmentShared(trainingId: number): boolean {
+    return this.sharedAssignments.get(trainingId) || false;
+  }
+
+  isFeedbackShared(trainingId: number): boolean {
+    return this.sharedFeedback.get(trainingId) || false;
+  }
+
+  checkSharedStatus(trainingId: number): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    // Check if assignment is shared (for trainers)
+    this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.sharedAssignments.set(trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.assignmentSharedBy.set(trainingId, response.trainer_username);
+          }
+        } else {
+          this.sharedAssignments.set(trainingId, false);
+          this.assignmentSharedBy.delete(trainingId);
+        }
+      },
+      error: () => {
+        this.sharedAssignments.set(trainingId, false);
+        this.assignmentSharedBy.delete(trainingId);
+      }
+    });
+
+    // Check if feedback is shared (for trainers)
+    this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.sharedFeedback.set(trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.feedbackSharedBy.set(trainingId, response.trainer_username);
+          }
+        } else {
+          this.sharedFeedback.set(trainingId, false);
+          this.feedbackSharedBy.delete(trainingId);
+        }
+      },
+      error: () => {
+        this.sharedFeedback.set(trainingId, false);
+        this.feedbackSharedBy.delete(trainingId);
+      }
+    });
+  }
+
+  getAssignmentSharedBy(trainingId: number): string {
+    return this.assignmentSharedBy.get(trainingId) || '';
+  }
+
+  getFeedbackSharedBy(trainingId: number): string {
+    return this.feedbackSharedBy.get(trainingId) || '';
   }
 
   fetchTrainingRequests(): void {
@@ -604,6 +747,93 @@ export class EngineerDashboardComponent implements OnInit {
         console.error('Error status:', err.status);
       }
     });
+  }
+
+  get myTrainings(): TrainingDetail[] {
+    // Backend stores trainer_name as username (employeeId), so prioritize matching against employeeId
+    if (!this.employeeId) {
+      return [];
+    }
+    
+    // Use cache to prevent repeated calculations during change detection
+    const cacheKey = `${this.employeeId}-${this.employeeName}-${this.allTrainings.length}`;
+    if (this._myTrainingsCacheKey === cacheKey && this._myTrainingsCache.length >= 0) {
+      return this._myTrainingsCache;
+    }
+    
+    const empId = String(this.employeeId).trim();
+    const empName = (this.employeeName || '').trim();
+    
+    // Debug: Log key info only once per cache miss
+    if (this.allTrainings.length > 0) {
+      const uniqueTrainers = [...new Set(this.allTrainings.map(t => String(t.trainer_name || '').trim()).filter(Boolean))];
+      console.log(`[Trainer Zone] Looking for: employeeId="${empId}", employeeName="${empName}"`);
+      console.log(`[Trainer Zone] Found ${this.allTrainings.length} total trainings`);
+      console.log(`[Trainer Zone] Unique trainer_name values in database:`, uniqueTrainers);
+      console.log(`[Trainer Zone] Sample trainings with trainer_name:`, this.allTrainings.slice(0, 5).map(t => ({
+        id: t.id,
+        training_name: t.training_name,
+        trainer_name: String(t.trainer_name || '').trim(),
+        trainer_name_raw: t.trainer_name,
+        trainer_name_type: typeof t.trainer_name
+      })));
+    }
+    
+    // Filter: Match against employeeId first (what backend stores), then employeeName as fallback
+    const filtered = this.allTrainings
+      .filter(t => {
+        const trainerName = String(t.trainer_name || '').trim();
+        if (!trainerName) return false;
+        
+        // Normalize all strings for comparison
+        const trainerNameLower = trainerName.toLowerCase();
+        const empIdLower = empId.toLowerCase();
+        const empNameLower = empName.toLowerCase();
+        
+        // Primary match: employeeId (username) - exact match (case-insensitive)
+        const matchesId = trainerNameLower === empIdLower;
+        
+        // Fallback match: employeeName (for trainings imported via Excel or other sources)
+        const matchesName = empName && empNameLower.length > 0 && trainerNameLower === empNameLower;
+        
+        // Additional: Check if trainer_name contains the employeeId (for partial matches like "5503411 - John Doe")
+        const containsId = empIdLower.length > 0 && trainerNameLower.includes(empIdLower);
+        
+        // Additional: Check if trainer_name contains the employeeName (for partial matches)
+        const containsName = empName && empNameLower.length > 0 && trainerNameLower.includes(empNameLower);
+        
+        const matches = matchesId || matchesName || containsId || containsName;
+        
+        if (matches) {
+          console.log(`[Trainer Zone] ✓ Match: "${t.training_name}" (trainer_name: "${trainerName}" matches employeeId="${empId}" or employeeName="${empName}")`);
+        }
+        
+        return matches;
+      })
+      .sort((a, b) => {
+        const dateA = a.training_date ? new Date(a.training_date).getTime() : 0;
+        const dateB = b.training_date ? new Date(b.training_date).getTime() : 0;
+        return dateB - dateA; // Sort descending
+      });
+    
+    console.log(`[Trainer Zone] Result: ${filtered.length} trainings found for employeeId="${empId}"`);
+    
+    // Update cache
+    this._myTrainingsCache = filtered;
+    this._myTrainingsCacheKey = cacheKey;
+    // Check shared status for all trainings
+    filtered.forEach(training => {
+      this.checkSharedStatus(training.id);
+    });
+    
+    return filtered;
+  }
+
+  isUpcoming(dateStr?: string): boolean {
+    if (!dateStr) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(dateStr) >= today;
   }
 
   get filteredTrainings(): TrainingDetail[] {
@@ -758,6 +988,100 @@ export class EngineerDashboardComponent implements OnInit {
     this.trainerZoneView = view;
   }
 
+  openShareAssignment(trainingId: number): void {
+    this.resetNewAssignmentForm();
+    this.newAssignment.trainingId = trainingId;
+    
+    // Check shared status and load existing data if available
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+      this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+        next: (response: any) => {
+          if (response) {
+            // Assignment already exists - load it for editing
+            this.sharedAssignments.set(trainingId, true);
+            if (response.trainer_username) {
+              this.assignmentSharedBy.set(trainingId, response.trainer_username);
+            }
+            
+            // Load existing assignment data
+            this.newAssignment.title = response.title || '';
+            this.newAssignment.description = response.description || '';
+            this.newAssignment.questions = response.questions || [];
+            
+            const currentUser = this.authService.getUsername() || this.employeeId || '';
+            if (response.trainer_username && response.trainer_username !== currentUser) {
+              this.toastService.info(`Assignment already shared by your co-trainer (${response.trainer_username}). You can update it below.`);
+            } else {
+              this.toastService.info('Loading existing assignment. You can update it below.');
+            }
+          } else {
+            this.sharedAssignments.set(trainingId, false);
+          }
+          this.setTrainerZoneView('assignmentForm');
+        },
+        error: (err) => {
+          // If 403, check if it's because assignment exists
+          if (err.status === 403) {
+            this.toastService.warning('Unable to check assignment status. Please try again.');
+          }
+          this.setTrainerZoneView('assignmentForm');
+        }
+      });
+    } else {
+      this.setTrainerZoneView('assignmentForm');
+    }
+  }
+
+  openShareFeedback(trainingId: number): void {
+    this.resetNewFeedbackForm();
+    this.newFeedback.trainingId = trainingId;
+    
+    // Check shared status and load existing data if available
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+      this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+        next: (response: any) => {
+          if (response) {
+            // Feedback already exists - load it for editing
+            this.sharedFeedback.set(trainingId, true);
+            if (response.trainer_username) {
+              this.feedbackSharedBy.set(trainingId, response.trainer_username);
+            }
+            
+            // Load existing feedback data
+            this.newFeedback.customQuestions = (response.customQuestions || []).map((q: any) => ({
+              text: q.text || '',
+              options: q.options || [],
+              isDefault: q.isDefault || false
+            }));
+            
+            const currentUser = this.authService.getUsername() || this.employeeId || '';
+            if (response.trainer_username && response.trainer_username !== currentUser) {
+              this.toastService.info(`Feedback already shared by your co-trainer (${response.trainer_username}). You can update it below.`);
+            } else {
+              this.toastService.info('Loading existing feedback. You can update it below.');
+            }
+          } else {
+            this.sharedFeedback.set(trainingId, false);
+          }
+          this.setTrainerZoneView('feedbackForm');
+        },
+        error: (err) => {
+          // If 403, check if it's because feedback exists
+          if (err.status === 403) {
+            this.toastService.warning('Unable to check feedback status. Please try again.');
+          }
+          this.setTrainerZoneView('feedbackForm');
+        }
+      });
+    } else {
+      this.setTrainerZoneView('feedbackForm');
+    }
+  }
+
   resetNewAssignmentForm(): void {
     this.newAssignment = {
       trainingId: null,
@@ -768,31 +1092,106 @@ export class EngineerDashboardComponent implements OnInit {
   }
 
   submitAssignment(): void {
+    console.log('submitAssignment called', this.newAssignment);
+    
     if (!this.newAssignment.trainingId || !this.newAssignment.title.trim() || this.newAssignment.questions.length === 0) {
-      alert('Please select a training, provide a title, and add at least one question.');
+      const errorMsg = 'Please select a training, provide a title, and add at least one question.';
+      console.warn('Validation failed:', { 
+        trainingId: this.newAssignment.trainingId, 
+        title: this.newAssignment.title, 
+        questionsCount: this.newAssignment.questions.length 
+      });
+      alert(errorMsg);
       return;
     }
 
     for (const q of this.newAssignment.questions) {
       if (!q.text.trim()) {
-        alert('Please ensure all questions have text.');
+        const errorMsg = 'Please ensure all questions have text.';
+        console.warn('Validation failed: question without text', q);
+        alert(errorMsg);
         return;
       }
       if (q.type === 'single-choice' || q.type === 'multiple-choice') {
         if (q.options.some(opt => !opt.text.trim())) {
-          alert('Please ensure all options have text.');
+          const errorMsg = 'Please ensure all options have text.';
+          console.warn('Validation failed: option without text', q);
+          alert(errorMsg);
           return;
         }
         if (!q.options.some(opt => opt.isCorrect)) {
-          alert(`Please mark at least one correct answer for the question: "${q.text}"`);
+          const errorMsg = `Please mark at least one correct answer for the question: "${q.text}"`;
+          console.warn('Validation failed: no correct answer marked', q);
+          alert(errorMsg);
           return;
         }
       }
     }
 
-    console.log('Submitting Assignment Data:', JSON.stringify(this.newAssignment, null, 2));
-    alert('Assignment with structured questions created successfully! (Simulated - check browser console for the data structure)');
-    this.setTrainerZoneView('overview');
+    const token = this.authService.getToken();
+    if (!token) {
+      console.error('No authentication token found');
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.newAssignment.trainingId,
+      title: this.newAssignment.title,
+      description: this.newAssignment.description || '',
+      questions: this.newAssignment.questions
+    };
+
+    console.log('Submitting assignment payload:', payload);
+    
+    this.http.post('http://localhost:8000/shared-content/assignments', payload, { headers }).subscribe({
+      next: (response: any) => {
+        console.log('Assignment shared successfully:', response);
+        // Mark assignment as shared for this training
+        if (this.newAssignment.trainingId) {
+          this.sharedAssignments.set(this.newAssignment.trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.assignmentSharedBy.set(this.newAssignment.trainingId, response.trainer_username);
+          }
+        }
+        this.toastService.success('Assignment shared successfully!');
+        this.resetNewAssignmentForm();
+        this.setTrainerZoneView('overview');
+      },
+      error: (err) => {
+        console.error('Failed to share assignment:', err);
+        console.error('Error details:', {
+          status: err.status,
+          statusText: err.statusText,
+          error: err.error,
+          message: err.message
+        });
+        if (err.status === 403) {
+          // Check if assignment already exists (shared by co-trainer)
+          if (this.newAssignment.trainingId) {
+            this.checkSharedStatus(this.newAssignment.trainingId);
+            // Use setTimeout to allow checkSharedStatus to complete
+            setTimeout(() => {
+              if (this.isAssignmentShared(this.newAssignment.trainingId!)) {
+                const sharedBy = this.getAssignmentSharedBy(this.newAssignment.trainingId!);
+                this.toastService.warning(`Assignment has already been shared for this training by your co-trainer (${sharedBy}). You can update it by modifying the existing assignment.`);
+              } else {
+                this.toastService.error('You can only share assignments for trainings you have scheduled.');
+              }
+            }, 500);
+          } else {
+            this.toastService.error('You can only share assignments for trainings you have scheduled.');
+          }
+        } else if (err.status === 404) {
+          this.toastService.error('Training not found.');
+        } else {
+          const errorMessage = err.error?.detail || err.message || err.statusText || 'Unknown error';
+          this.toastService.error(`Failed to share assignment. Error: ${errorMessage}`);
+        }
+      }
+    });
   }
 
   addAssignmentQuestion(): void {
@@ -864,13 +1263,54 @@ export class EngineerDashboardComponent implements OnInit {
         }))
         .filter(q => q.options.length > 0);
 
-    console.log({
-      trainingId: this.newFeedback.trainingId,
-      defaultQuestions: this.defaultFeedbackQuestions,
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.newFeedback.trainingId,
+      defaultQuestions: this.defaultFeedbackQuestions.map(q => ({
+        text: q.text,
+        options: q.options,
+        isDefault: q.isDefault
+      })),
       customQuestions: finalCustomQuestions
+    };
+
+    this.http.post('http://localhost:8000/shared-content/feedback', payload, { headers }).subscribe({
+      next: (response: any) => {
+        // Mark feedback as shared for this training
+        if (this.newFeedback.trainingId) {
+          this.sharedFeedback.set(this.newFeedback.trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.feedbackSharedBy.set(this.newFeedback.trainingId, response.trainer_username);
+          }
+        }
+        this.toastService.success('Feedback form shared successfully!');
+        this.setTrainerZoneView('overview');
+      },
+      error: (err) => {
+        console.error('Failed to share feedback:', err);
+        if (err.status === 403) {
+          // Check if feedback already exists
+          this.checkSharedStatus(this.newFeedback.trainingId!);
+          if (this.isFeedbackShared(this.newFeedback.trainingId!)) {
+            const sharedBy = this.getFeedbackSharedBy(this.newFeedback.trainingId!);
+            this.toastService.warning(`Feedback has already been shared for this training by your co-trainer (${sharedBy}).`);
+          } else {
+            this.toastService.error('You can only share feedback for trainings you have scheduled.');
+          }
+        } else if (err.status === 404) {
+          this.toastService.error('Training not found.');
+        } else {
+          this.toastService.error(`Failed to share feedback. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
     });
-    alert('Feedback form created successfully! (Simulated)');
-    this.setTrainerZoneView('overview');
   }
 
   addCustomQuestion(): void {
@@ -1006,12 +1446,368 @@ export class EngineerDashboardComponent implements OnInit {
     });
   }
 
+  viewedAssignment: Assignment | null = null;
+  viewedFeedback: { defaultQuestions: FeedbackQuestion[], customQuestions: FeedbackQuestion[], trainingId?: number } | null = null;
+  currentFeedbackTrainingId: number | null = null; // Store training ID separately for feedback submission
+  showAssignmentModal: boolean = false;
+  showFeedbackModal: boolean = false;
+  showExamModal: boolean = false;
+  userAnswers: UserAnswer[] = [];
+  assignmentResult: AssignmentResult | null = null;
+  showResultModal: boolean = false;
+  isSubmittingAssignment: boolean = false;
+  currentExamAssignment: Assignment | null = null;
+
   viewAssignment(training: TrainingDetail): void {
-    alert(`Opening assignment for "${training.training_name}". (This is a simulation).`);
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.viewedAssignment = {
+            trainingId: response.training_id,
+            title: response.title,
+            description: response.description || '',
+            questions: response.questions
+          };
+          this.showAssignmentModal = true;
+        } else {
+          this.toastService.warning('No assignment has been shared for this training yet.');
+        }
+      },
+      error: (err) => {
+        console.error('Failed to fetch assignment:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only access assignments for trainings assigned to you.');
+        } else if (err.status === 404) {
+          this.toastService.warning('No assignment has been shared for this training yet.');
+        } else {
+          this.toastService.error(`Failed to fetch assignment. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
   }
 
   giveFeedback(training: TrainingDetail): void {
-    alert(`Opening feedback form for "${training.training_name}". (This is a simulation).`);
+    // If already submitted, just show a message
+    if (this.isFeedbackSubmitted(training.id)) {
+      this.toastService.info('You have already submitted feedback for this training.');
+      return;
+    }
+
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    this.http.get(`http://localhost:8000/shared-content/feedback/${training.id}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.viewedFeedback = {
+            defaultQuestions: response.defaultQuestions || [],
+            customQuestions: response.customQuestions || [],
+            trainingId: training.id
+          };
+          this.currentFeedbackTrainingId = training.id;
+          this.showFeedbackModal = true;
+        } else {
+          this.toastService.warning('No feedback form has been shared for this training yet.');
+        }
+      },
+      error: (err) => {
+        console.error('Failed to fetch feedback:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only access feedback for trainings assigned to you.');
+        } else if (err.status === 404) {
+          this.toastService.warning('No feedback form has been shared for this training yet.');
+        } else {
+          this.toastService.error(`Failed to fetch feedback. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
+  }
+
+  closeAssignmentModal(): void {
+    this.showAssignmentModal = false;
+    this.viewedAssignment = null;
+  }
+
+  closeFeedbackModal(): void {
+    this.showFeedbackModal = false;
+    this.viewedFeedback = null;
+    this.currentFeedbackTrainingId = null;
+  }
+
+  submitEngineerFeedback(): void {
+    // Mark feedback as submitted
+    if (this.currentFeedbackTrainingId) {
+      this.feedbackSubmissionStatus.set(this.currentFeedbackTrainingId, true);
+      this.closeFeedbackModal();
+      this.toastService.success('Feedback submitted successfully!');
+    } else {
+      this.toastService.error('Unable to submit feedback. Please try again.');
+    }
+  }
+
+  private initializeExam(response: any): void {
+    this.currentExamAssignment = {
+      trainingId: response.training_id,
+      title: response.title,
+      description: response.description || '',
+      questions: response.questions,
+      sharedAssignmentId: response.id
+    };
+    // Initialize user answers
+    this.userAnswers = response.questions.map((q: AssignmentQuestion, index: number) => ({
+      questionIndex: index,
+      type: q.type,
+      selectedOptions: [],
+      textAnswer: ''
+    }));
+    this.showExamModal = true;
+  }
+
+  takeExam(training: TrainingDetail): void {
+    // Check if already submitted and completed (100%)
+    if (this.isAssignmentSubmitted(training.id) && this.isAssignmentCompleted(training.id)) {
+      this.toastService.warning('You have already completed this assignment with 100% score. Click "View Results" to see your score.');
+      return;
+    }
+
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          // Double-check submission status from backend
+          this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+            next: (result: any) => {
+              if (result) {
+                this.assignmentSubmissionStatus.set(training.id, true);
+                this.assignmentScores.set(training.id, result.score || 0);
+                // Only block if score is 100%
+                if (result.score === 100) {
+                  this.toastService.warning('You have already completed this assignment with 100% score. Click "View Results" to see your score.');
+                  return;
+                }
+                // If score < 100%, allow retake
+              }
+              // Initialize exam
+              this.initializeExam(response);
+            },
+            error: (err) => {
+              // No result found (404), can take exam
+              this.initializeExam(response);
+            }
+          });
+        } else {
+          this.toastService.warning('No assignment has been shared for this training yet.');
+        }
+      },
+      error: (err) => {
+        console.error('Failed to fetch assignment:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only access assignments for trainings assigned to you.');
+        } else if (err.status === 404) {
+          this.toastService.warning('No assignment has been shared for this training yet.');
+        } else {
+          this.toastService.error(`Failed to fetch assignment. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
+  }
+
+  closeExamModal(): void {
+    this.showExamModal = false;
+    this.currentExamAssignment = null;
+    this.userAnswers = [];
+  }
+
+  onAnswerSelect(questionIndex: number, optionIndex: number, isMultiple: boolean): void {
+    if (!this.userAnswers[questionIndex]) {
+      return;
+    }
+
+    if (isMultiple) {
+      // Multiple choice: toggle option
+      const currentIndex = this.userAnswers[questionIndex].selectedOptions.indexOf(optionIndex);
+      if (currentIndex === -1) {
+        this.userAnswers[questionIndex].selectedOptions.push(optionIndex);
+      } else {
+        this.userAnswers[questionIndex].selectedOptions.splice(currentIndex, 1);
+      }
+    } else {
+      // Single choice: replace selection
+      this.userAnswers[questionIndex].selectedOptions = [optionIndex];
+    }
+  }
+
+  onTextAnswerChange(questionIndex: number, text: string): void {
+    if (this.userAnswers[questionIndex]) {
+      this.userAnswers[questionIndex].textAnswer = text;
+    }
+  }
+
+  isOptionSelected(questionIndex: number, optionIndex: number): boolean {
+    return this.userAnswers[questionIndex]?.selectedOptions.includes(optionIndex) || false;
+  }
+
+  submitExam(): void {
+    if (!this.currentExamAssignment || !this.currentExamAssignment.sharedAssignmentId) {
+      this.toastService.error('Invalid assignment data.');
+      return;
+    }
+
+    // Validate all questions are answered
+    for (let i = 0; i < this.userAnswers.length; i++) {
+      const answer = this.userAnswers[i];
+      if (answer.type === 'single-choice' || answer.type === 'multiple-choice') {
+        if (answer.selectedOptions.length === 0) {
+          this.toastService.warning(`Please answer question ${i + 1}.`);
+          return;
+        }
+      } else if (answer.type === 'text-input') {
+        if (!answer.textAnswer || answer.textAnswer.trim() === '') {
+          this.toastService.warning(`Please answer question ${i + 1}.`);
+          return;
+        }
+      }
+    }
+
+    this.isSubmittingAssignment = true;
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      this.isSubmittingAssignment = false;
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.currentExamAssignment.trainingId,
+      shared_assignment_id: this.currentExamAssignment.sharedAssignmentId,
+      answers: this.userAnswers
+    };
+
+    this.http.post('http://localhost:8000/shared-content/assignments/submit', payload, { headers }).subscribe({
+      next: (response: any) => {
+        this.isSubmittingAssignment = false;
+        this.assignmentResult = {
+          id: response.id,
+          training_id: response.training_id,
+          score: response.score,
+          total_questions: response.total_questions,
+          correct_answers: response.correct_answers,
+          question_results: response.question_results,
+          submitted_at: response.submitted_at
+        };
+        // Mark assignment as submitted and store score
+        if (this.currentExamAssignment && this.currentExamAssignment.trainingId) {
+          this.assignmentSubmissionStatus.set(this.currentExamAssignment.trainingId, true);
+          this.assignmentScores.set(this.currentExamAssignment.trainingId, response.score);
+        }
+        this.showExamModal = false;
+        this.showResultModal = true;
+        this.toastService.success(`Assignment submitted! Your score: ${response.score}%`);
+      },
+      error: (err) => {
+        this.isSubmittingAssignment = false;
+        console.error('Failed to submit assignment:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only submit assignments for trainings assigned to you.');
+        } else {
+          this.toastService.error(`Failed to submit assignment. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
+  }
+
+  viewAssignmentResult(training: TrainingDetail): void {
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          // Also fetch assignment to show questions
+          this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+            next: (assignmentResponse: any) => {
+              if (assignmentResponse) {
+                this.currentExamAssignment = {
+                  trainingId: assignmentResponse.training_id,
+                  title: assignmentResponse.title,
+                  description: assignmentResponse.description || '',
+                  questions: assignmentResponse.questions,
+                  sharedAssignmentId: assignmentResponse.id
+                };
+              }
+              this.assignmentResult = {
+                id: response.id,
+                training_id: response.training_id,
+                score: response.score,
+                total_questions: response.total_questions,
+                correct_answers: response.correct_answers,
+                question_results: response.question_results,
+                submitted_at: response.submitted_at
+              };
+              this.showResultModal = true;
+            },
+            error: (err) => {
+              // Still show result even if assignment fetch fails
+              this.assignmentResult = {
+                id: response.id,
+                training_id: response.training_id,
+                score: response.score,
+                total_questions: response.total_questions,
+                correct_answers: response.correct_answers,
+                question_results: response.question_results,
+                submitted_at: response.submitted_at
+              };
+              this.showResultModal = true;
+            }
+          });
+        } else {
+          this.toastService.warning('You have not submitted this assignment yet. Please take the assignment first.');
+        }
+      },
+      error: (err) => {
+        console.error('Failed to fetch assignment result:', err);
+        if (err.status === 404) {
+          this.toastService.warning('You have not submitted this assignment yet. Please take the assignment first.');
+        } else {
+          this.toastService.error(`Failed to fetch results. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
+  }
+
+  closeResultModal(): void {
+    this.showResultModal = false;
+    this.assignmentResult = null;
+    this.currentExamAssignment = null;
+  }
+
+  getQuestionResult(questionIndex: number): QuestionResult | null {
+    if (!this.assignmentResult || !this.assignmentResult.question_results) {
+      return null;
+    }
+    return this.assignmentResult.question_results[questionIndex] || null;
   }
 
   highlightUpcomingTrainings(): void {
@@ -1072,6 +1868,10 @@ export class EngineerDashboardComponent implements OnInit {
     this.activeTab = tabName;
     if (tabName === 'assignedTrainings') {
       this.fetchAssignedTrainings();
+    }
+    if (tabName === 'trainerZone') {
+      // Refresh scheduled trainings when switching to Trainer Zone to show latest sessions
+      this.fetchScheduledTrainings();
     }
     // Refresh training requests when switching to training catalog to show latest status
     if (tabName === 'trainingCatalog') {

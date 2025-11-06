@@ -31,5 +31,15 @@ async def register_user(user: UserRegister, db: AsyncSession = Depends(get_db_as
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+    
+    # Check if there's existing employee_competency data for this employee
+    from app.models import EmployeeCompetency
+    competency_check = select(EmployeeCompetency).where(EmployeeCompetency.employee_empid == user.emp_id)
+    competency_result = await db.execute(competency_check)
+    competency_count = len(competency_result.scalars().all())
+    
+    message = "User registered successfully"
+    if competency_count > 0:
+        message += f". Found {competency_count} competency record(s) linked to this employee."
 
-    return {"message": "User registered successfully"}
+    return {"message": message}

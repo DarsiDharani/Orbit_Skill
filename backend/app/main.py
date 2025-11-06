@@ -2,7 +2,7 @@ import logging
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import register, login, dashboard_routes, additional_skills, training_routes, assignment_routes, training_requests
+from app.routes import register, login, dashboard_routes, additional_skills, training_routes, assignment_routes, training_requests, shared_content_routes
 from app.database import AsyncSessionLocal, create_db_and_tables
 from app.excel_loader import load_all_from_excel
 
@@ -37,6 +37,7 @@ app.include_router(additional_skills.router)
 app.include_router(training_routes.router)
 app.include_router(assignment_routes.router)
 app.include_router(training_requests.router)
+app.include_router(shared_content_routes.router)
 
 # <<< NEW: Root Endpoint for Welcome Message >>>
 @app.get("/", tags=["Default"])

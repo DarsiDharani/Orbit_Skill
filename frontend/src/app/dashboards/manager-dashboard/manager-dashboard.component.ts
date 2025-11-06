@@ -1472,6 +1472,18 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.trainerZoneView = view;
   }
 
+  openShareAssignment(trainingId: number): void {
+    this.resetNewAssignmentForm();
+    this.newAssignment.trainingId = trainingId;
+    this.setTrainerZoneView('assignmentForm');
+  }
+
+  openShareFeedback(trainingId: number): void {
+    this.resetNewFeedbackForm();
+    this.newFeedback.trainingId = trainingId;
+    this.setTrainerZoneView('feedbackForm');
+  }
+
   resetNewAssignmentForm(): void {
     this.newAssignment = {
       trainingId: null,
@@ -1504,9 +1516,36 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       }
     }
 
-    console.log('Submitting Assignment Data:', JSON.stringify(this.newAssignment, null, 2));
-    alert('Assignment with structured questions created successfully! (Simulated - check browser console for the data structure)');
-    this.setTrainerZoneView('overview');
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.newAssignment.trainingId,
+      title: this.newAssignment.title,
+      description: this.newAssignment.description || '',
+      questions: this.newAssignment.questions
+    };
+
+    this.http.post('http://localhost:8000/shared-content/assignments', payload, { headers }).subscribe({
+      next: () => {
+        this.toastService.success('Assignment shared successfully!');
+        this.setTrainerZoneView('overview');
+      },
+      error: (err) => {
+        console.error('Failed to share assignment:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only share assignments for trainings you have scheduled.');
+        } else if (err.status === 404) {
+          this.toastService.error('Training not found.');
+        } else {
+          this.toastService.error(`Failed to share assignment. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
   }
 
   addAssignmentQuestion(): void {
@@ -1578,13 +1617,39 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         }))
         .filter(q => q.options.length > 0);
 
-    console.log({
-      trainingId: this.newFeedback.trainingId,
-      defaultQuestions: this.defaultFeedbackQuestions,
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.newFeedback.trainingId,
+      defaultQuestions: this.defaultFeedbackQuestions.map(q => ({
+        text: q.text,
+        options: q.options,
+        isDefault: q.isDefault
+      })),
       customQuestions: finalCustomQuestions
+    };
+
+    this.http.post('http://localhost:8000/shared-content/feedback', payload, { headers }).subscribe({
+      next: () => {
+        this.toastService.success('Feedback form shared successfully!');
+        this.setTrainerZoneView('overview');
+      },
+      error: (err) => {
+        console.error('Failed to share feedback:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only share feedback for trainings you have scheduled.');
+        } else if (err.status === 404) {
+          this.toastService.error('Training not found.');
+        } else {
+          this.toastService.error(`Failed to share feedback. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
     });
-    alert('Feedback form created successfully! (Simulated)');
-    this.setTrainerZoneView('overview');
   }
 
   addCustomQuestion(): void {

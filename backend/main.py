@@ -10,9 +10,9 @@ import logging
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import register, login, dashboard_routes, additional_skills, training_routes, assignment_routes, training_requests
+from app.routes import register, login, dashboard_routes, additional_skills, training_routes, assignment_routes, training_requests, shared_content_routes
 from app.database import AsyncSessionLocal, create_db_and_tables
-from app.excel_loader import load_all_from_excel
+from app.excel_loader import load_all_from_excel, load_manager_employee_from_csv, load_employee_competency_from_excel
 
 # --- Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -45,6 +45,7 @@ app.include_router(additional_skills.router)
 app.include_router(training_routes.router)
 app.include_router(assignment_routes.router)
 app.include_router(training_requests.router)
+app.include_router(shared_content_routes.router)
 
 # <<< NEW: Root Endpoint for Welcome Message >>>
 @app.get("/", tags=["Default"])
@@ -68,13 +69,115 @@ async def upload_and_refresh_data(file: UploadFile = File(...)):
     try:
         async with AsyncSessionLocal() as db:
             await load_all_from_excel(file.file, db)
+            
+            # Verify data was inserted
+            from sqlalchemy import select, func
+            from app.models import Trainer, TrainingDetail
+            
+            trainers_result = await db.execute(select(func.count(Trainer.id)))
+            trainers_count = trainers_result.scalar()
+            trainings_result = await db.execute(select(func.count(TrainingDetail.id)))
+            trainings_count = trainings_result.scalar()
         
         logging.info(f"Successfully processed and loaded data from '{file.filename}'.")
-        return {"message": f"Data from '{file.filename}' has been successfully uploaded and the database has been refreshed."}
+        return {
+            "message": f"Data from '{file.filename}' has been successfully uploaded and the database has been refreshed.",
+            "trainers_inserted": trainers_count,
+            "trainings_inserted": trainings_count,
+            "status": "success"
+        }
     
+    except ValueError as ve:
+        # This is raised when all rows are skipped
+        logging.error(f"Validation error: {ve}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         logging.error(f"An error occurred during file processing and database refresh: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+
+@app.post("/upload-manager-employee-csv", status_code=200, tags=["Admin"])
+async def upload_manager_employee_csv(file: UploadFile = File(...)):
+    """
+    Accepts a CSV file upload for manager-employee relationships and loads it into the database.
+    Expected CSV columns: manager_empid, manager_name, employee_empid, employee_name, 
+                         manager_is_trainer, employee_is_trainer
+    """
+    logging.info(f"API: Received CSV file '{file.filename}' for manager-employee data load.")
+
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV file.")
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await load_manager_employee_from_csv(file.file, db)
+            
+            # Verify data was inserted
+            from sqlalchemy import select, func
+            from app.models import ManagerEmployee
+            
+            # Count all manager-employee relationships
+            count_result = await db.execute(
+                select(func.count()).select_from(ManagerEmployee)
+            )
+            total_count = count_result.scalar()
+        
+        logging.info(f"Successfully processed and loaded manager-employee data from '{file.filename}'.")
+        return {
+            "message": f"Manager-employee data from '{file.filename}' has been successfully uploaded and the database has been refreshed.",
+            "relationships_inserted": total_count,
+            "status": "success"
+        }
+    
+    except ValueError as ve:
+        logging.error(f"Validation error: {ve}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logging.error(f"An error occurred during CSV file processing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+
+@app.post("/upload-employee-competency-excel", status_code=200, tags=["Admin"])
+async def upload_employee_competency_excel(file: UploadFile = File(...)):
+    """
+    Accepts an Excel file upload for employee competency data and loads it into the database.
+    Expected Excel sheet: 'Employee Competency'
+    Expected columns: Division, Department, Employee ID, Employee Name, 
+                     Role Specific Competency (MHS), Designation, Competency, Project, Skill,
+                     Current Expertise Level, Target Expertise Level, Target Date, Comments
+    """
+    logging.info(f"API: Received Excel file '{file.filename}' for employee competency data load.")
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await load_employee_competency_from_excel(file.file, db)
+            
+            # Verify data was inserted
+            from sqlalchemy import select, func
+            from app.models import EmployeeCompetency
+            
+            # Count all employee competency records
+            count_result = await db.execute(
+                select(func.count()).select_from(EmployeeCompetency)
+            )
+            total_count = count_result.scalar()
+        
+        logging.info(f"Successfully processed and loaded employee competency data from '{file.filename}'.")
+        return {
+            "message": f"Employee competency data from '{file.filename}' has been successfully uploaded and the database has been refreshed.",
+            "records_inserted": total_count,
+            "status": "success"
+        }
+    
+    except ValueError as ve:
+        logging.error(f"Validation error: {ve}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logging.error(f"An error occurred during Excel file processing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 # --- Application Lifecycle Events ---
 @app.on_event("startup")

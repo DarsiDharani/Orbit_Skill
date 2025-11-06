@@ -682,11 +682,23 @@
                                     <span *ngIf="t.skill" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-code mr-1"></i>{{ t.skill }}</span>
                                 </div>
                                  <div class="mt-auto pt-2 border-t border-slate-200/80 flex items-center gap-2">
-                                    <button (click)="viewAssignment(t)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
-                                        <i class="fa-solid fa-file-lines mr-1.5"></i>View Assignment
+                                    <button *ngIf="!isAssignmentSubmitted(t.id)" (click)="takeExam(t)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
+                                        <i class="fa-solid fa-file-lines mr-1.5"></i>Take Assignment
                                     </button>
-                                    <button (click)="giveFeedback(t)" class="flex-1 bg-green-500 text-white font-semibold py-1 rounded-lg hover:bg-rose-700 transition-colors duration-200 text-xs">
+                                    <button *ngIf="isAssignmentSubmitted(t.id) && isAssignmentCompleted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                        <i class="fa-solid fa-check-circle mr-1.5"></i>Assignment Submitted
+                                    </button>
+                                    <button *ngIf="isAssignmentSubmitted(t.id) && !isAssignmentCompleted(t.id)" (click)="takeExam(t)" class="flex-1 bg-orange-500 text-white font-semibold py-1 rounded-lg hover:bg-orange-700 transition-colors duration-200 text-xs">
+                                        <i class="fa-solid fa-redo mr-1.5"></i>Retake Test
+                                    </button>
+                                    <button *ngIf="isAssignmentSubmitted(t.id)" (click)="viewAssignmentResult(t)" class="flex-1 bg-blue-600 text-white font-semibold py-1 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-xs">
+                                        <i class="fa-solid fa-chart-line mr-1.5"></i>View Results
+                                    </button>
+                                    <button *ngIf="!isFeedbackSubmitted(t.id)" (click)="giveFeedback(t)" class="flex-1 bg-green-500 text-white font-semibold py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-comment-dots mr-1.5"></i>Give Feedback
+                                    </button>
+                                    <button *ngIf="isFeedbackSubmitted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                        <i class="fa-solid fa-check-circle mr-1.5"></i>Feedback Submitted
                                     </button>
                                 </div>
                             </div>
@@ -921,41 +933,70 @@
                 <div *ngIf="activeTab === 'trainerZone' && isTrainer" @slideFadeIn>
                     <div *ngIf="trainerZoneView === 'overview'" @fadeIn>
                         <h2 class="text-3xl font-bold text-slate-800 mb-6">Trainer Zone</h2>
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div class="relative bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-calendar-plus absolute -right-4 -bottom-4 text-blue-900/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Schedule Training</h3>
-                                    <p class="text-sky-100 text-sm mb-6">Create and publish new training sessions for the team.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="openScheduleTrainingModal()" class="w-full bg-white text-sky-600 font-bold px-6 py-3 rounded-lg hover:bg-sky-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Schedule New Training
-                                        </button>
-                                    </div>
-                                </div>
+                        <!-- Schedule New Training Button -->
+                        <div class="mb-6">
+                            <button (click)="openScheduleTrainingModal()" class="bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold px-6 py-3 rounded-lg hover:from-sky-600 hover:to-blue-700 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
+                                <i class="fa-solid fa-plus-circle mr-2"></i>Schedule New Training
+                            </button>
+                        </div>
+
+                        <!-- Scheduled Training Sessions List -->
+                        <div class="space-y-4">
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">My Scheduled Training Sessions</h3>
+                            <div *ngIf="myTrainings.length === 0" class="bg-slate-50 rounded-xl p-8 text-center border-2 border-dashed border-slate-300">
+                                <i class="fa-solid fa-calendar-xmark text-4xl text-slate-400 mb-3"></i>
+                                <p class="text-slate-600 font-medium">No training sessions scheduled yet.</p>
+                                <p class="text-slate-500 text-sm mt-1">Click "Schedule New Training" to create your first session.</p>
+                                <p class="text-xs text-amber-600 mt-3">Debug: Check browser console (F12) for detailed filter information.</p>
                             </div>
-                
-                            <div class="relative bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-file-alt absolute -right-4 -bottom-4 text-violet-800/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Assignments</h3>
-                                    <p class="text-violet-100 text-sm mb-6">Create and distribute assignments for a training.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="setTrainerZoneView('assignmentForm')" class="w-full bg-white text-indigo-600 font-bold px-6 py-3 rounded-lg hover:bg-violet-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Create Assignment
-                                        </button>
+                            <div *ngIf="myTrainings.length > 0" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4" [@listStagger]="myTrainings.length">
+                                <div *ngFor="let training of myTrainings"
+                                    class="bg-white/70 backdrop-blur-sm p-2.5 rounded-2xl shadow-lg border border-slate-200/60 transform hover:-translate-y-1 transition-all duration-300 hover:shadow-xl flex flex-col gap-2">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-start gap-2">
+                                            <div class="w-9 h-9 bg-sky-100 text-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i [ngClass]="getTrainingCardIcon(training.skill)" class="text-lg"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-xs font-bold text-slate-800">{{ training.training_name }}</h3>
+                                                <p class="text-[10px] text-slate-500">by {{ training.trainer_name }}</p>
+                                            </div>
+                                        </div>
+                                        <span *ngIf="isUpcoming(training.training_date)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200">
+                                            <i class="fa-solid fa-clock mr-1"></i> Upcoming
+                                        </span>
                                     </div>
-                                </div>
-                            </div>
-                
-                            <div class="relative bg-gradient-to-br from-yellow-500 to-amber-500 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-comments absolute -right-4 -bottom-4 text-amber-800/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Feedback Questions</h3>
-                                    <p class="text-amber-100 text-sm mb-6">Create a set of questions to gather feedback on a training.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="setTrainerZoneView('feedbackForm')" class="w-full bg-white text-yellow-600 font-bold px-6 py-3 rounded-lg hover:bg-yellow-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Create Feedback Form
+                                    <div class="border-t border-slate-200/80"></div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <div class="flex items-center gap-1.5 text-slate-600">
+                                            <i class="fa-solid fa-calendar-days text-slate-400"></i>
+                                            <span class="font-semibold text-slate-800">{{ training.training_date ? (training.training_date | date:'fullDate') : 'Date TBD' }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 text-slate-600">
+                                            <i class="fa-solid fa-clock text-slate-400"></i>
+                                            <span class="font-semibold text-slate-800">{{ training.time || 'Time TBD' }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                                        <span *ngIf="training.training_type" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-display mr-1"></i>{{ training.training_type }}</span>
+                                        <span *ngIf="training.skill_category" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-layer-group mr-1"></i>{{ training.skill_category }}</span>
+                                        <span *ngIf="training.skill" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-code mr-1"></i>{{ training.skill }}</span>
+                                    </div>
+                                    <div *ngIf="training.training_topics" class="text-[10px] text-slate-600 pt-1 line-clamp-2">
+                                        {{ training.training_topics }}
+                                    </div>
+                                    <div class="mt-auto pt-2 border-t border-slate-200/80 flex items-center gap-2">
+                                        <button *ngIf="!isAssignmentShared(training.id)" (click)="openShareAssignment(training.id)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-file-lines mr-1.5"></i>Share Assignment
+                                        </button>
+                                        <button *ngIf="isAssignmentShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
+                                        </button>
+                                        <button *ngIf="!isFeedbackShared(training.id)" (click)="openShareFeedback(training.id)" class="flex-1 bg-amber-500 text-white font-semibold py-1 rounded-lg hover:bg-amber-700 transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-comment-dots mr-1.5"></i>Share Feedback
+                                        </button>
+                                        <button *ngIf="isFeedbackShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
                                         </button>
                                     </div>
                                 </div>
@@ -975,10 +1016,13 @@
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label class="block text-sm font-medium text-slate-700 mb-2">Training Name *</label>
-                                        <select [(ngModel)]="newAssignment.trainingId" name="assignmentTraining" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                                        <select [(ngModel)]="newAssignment.trainingId" name="assignmentTraining" [disabled]="newAssignment.trainingId !== null" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:bg-slate-100 disabled:cursor-not-allowed">
                                             <option [ngValue]="null">Select a Training</option>
-                                            <option *ngFor="let t of allTrainings" [value]="t.id">{{ t.training_name }}</option>
+                                            <option *ngFor="let t of myTrainings" [value]="t.id">{{ t.training_name }}</option>
                                         </select>
+                                        <p *ngIf="newAssignment.trainingId !== null" class="text-xs text-slate-500 mt-1">
+                                            <i class="fa-solid fa-info-circle mr-1"></i>Training pre-selected from your scheduled sessions
+                                        </p>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-slate-700 mb-2">Assignment Title *</label>
@@ -1048,8 +1092,8 @@
                             </div>
                         
                             <div class="flex items-center justify-end space-x-3 mt-8 pt-4 border-t border-slate-300/80">
-                                <button (click)="setTrainerZoneView('overview')" class="px-5 py-2 text-slate-700 bg-slate-200 hover:bg-slate-300 font-semibold rounded-lg transition-colors duration-200">Cancel</button>
-                                <button (click)="submitAssignment()" class="px-5 py-2 bg-violet-600 text-white rounded-lg font-semibold hover:bg-violet-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all duration-200 shadow-md">
+                                <button type="button" (click)="setTrainerZoneView('overview')" class="px-5 py-2 text-slate-700 bg-slate-200 hover:bg-slate-300 font-semibold rounded-lg transition-colors duration-200">Cancel</button>
+                                <button type="button" (click)="submitAssignment()" class="px-5 py-2 bg-violet-600 text-white rounded-lg font-semibold hover:bg-violet-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all duration-200 shadow-md">
                                    <i class="fa-solid fa-paper-plane mr-2"></i> Create and Share Assignment
                                 </button>
                             </div>
@@ -1067,10 +1111,13 @@
                             <div class="space-y-4">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Training Name *</label>
-                                    <select [(ngModel)]="newFeedback.trainingId" name="feedbackTraining" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                                    <select [(ngModel)]="newFeedback.trainingId" name="feedbackTraining" [disabled]="newFeedback.trainingId !== null" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:bg-slate-100 disabled:cursor-not-allowed">
                                         <option [ngValue]="null">Select a Training</option>
-                                        <option *ngFor="let t of allTrainings" [value]="t.id">{{ t.training_name }}</option>
+                                        <option *ngFor="let t of myTrainings" [value]="t.id">{{ t.training_name }}</option>
                                     </select>
+                                    <p *ngIf="newFeedback.trainingId !== null" class="text-xs text-slate-500 mt-1">
+                                        <i class="fa-solid fa-info-circle mr-1"></i>Training pre-selected from your scheduled sessions
+                                    </p>
                                 </div>
 
                                 <div>
@@ -1340,4 +1387,286 @@
                 </button> </div>
         </form>
   </div>
+</div>
+
+<!-- Assignment View Modal (for trainers/viewing only) -->
+<div *ngIf="showAssignmentModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-t-2xl border-b border-slate-200">
+            <h3 class="text-xl font-bold text-slate-900" *ngIf="viewedAssignment">{{ viewedAssignment.title }}</h3>
+            <button (click)="closeAssignmentModal()" class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto p-8" *ngIf="viewedAssignment">
+            <div class="mb-6">
+                <p class="text-slate-600" *ngIf="viewedAssignment.description">{{ viewedAssignment.description }}</p>
+            </div>
+            <div class="space-y-6">
+                <div *ngFor="let question of viewedAssignment.questions; let i = index" class="bg-slate-50 rounded-lg p-6 border border-slate-200">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-slate-900 mb-1">Question {{ i + 1 }}</h4>
+                            <p class="text-slate-700">{{ question.text }}</p>
+                            <p class="text-sm text-slate-500 mt-1" *ngIf="question.helperText">{{ question.helperText }}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">
+                            {{ question.type }}
+                        </span>
+                    </div>
+                    <div *ngIf="question.type === 'single-choice' || question.type === 'multiple-choice'" class="space-y-2 mt-4">
+                        <div *ngFor="let option of question.options; let j = index" 
+                             class="flex items-center p-3 bg-white rounded-lg border" 
+                             [ngClass]="{'border-green-500 bg-green-50': option.isCorrect, 'border-slate-200': !option.isCorrect}">
+                            <i class="fa-solid mr-3" 
+                               [ngClass]="{'fa-check-circle text-green-600': option.isCorrect, 'fa-circle text-slate-400': !option.isCorrect}"></i>
+                            <span [ngClass]="{'font-semibold text-green-700': option.isCorrect, 'text-slate-700': !option.isCorrect}">
+                                {{ option.text }}
+                            </span>
+                            <span *ngIf="option.isCorrect" class="ml-auto px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">
+                                Correct
+                            </span>
+                        </div>
+                    </div>
+                    <div *ngIf="question.type === 'text-input'" class="mt-4">
+                        <textarea class="w-full px-4 py-2 bg-white rounded-lg border border-slate-300" rows="3" placeholder="Your answer here..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Exam Taking Modal -->
+<div *ngIf="showExamModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-t-2xl border-b border-slate-200">
+            <div>
+                <h3 class="text-xl font-bold text-slate-900" *ngIf="currentExamAssignment">{{ currentExamAssignment.title }}</h3>
+                <p class="text-sm text-slate-500 mt-1">Please answer all questions</p>
+            </div>
+            <button (click)="closeExamModal()" class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto p-8" *ngIf="currentExamAssignment">
+            <div class="mb-6">
+                <p class="text-slate-600" *ngIf="currentExamAssignment.description">{{ currentExamAssignment.description }}</p>
+            </div>
+            <div class="space-y-6">
+                <div *ngFor="let question of currentExamAssignment.questions; let i = index" class="bg-slate-50 rounded-lg p-6 border border-slate-200">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex-1">
+                            <h4 class="font-semibold text-slate-900 mb-1">Question {{ i + 1 }}</h4>
+                            <p class="text-slate-700">{{ question.text }}</p>
+                            <p class="text-sm text-slate-500 mt-1" *ngIf="question.helperText">{{ question.helperText }}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">
+                            {{ question.type }}
+                        </span>
+                    </div>
+                    <div *ngIf="question.type === 'single-choice'" class="space-y-2 mt-4">
+                        <div *ngFor="let option of question.options; let j = index" 
+                             (click)="onAnswerSelect(i, j, false)"
+                             class="flex items-center p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors"
+                             [ngClass]="{'border-violet-500 bg-violet-50': isOptionSelected(i, j)}">
+                            <input type="radio" [checked]="isOptionSelected(i, j)" (click)="$event.stopPropagation()" class="mr-3 h-5 w-5 text-violet-600 focus:ring-violet-500 cursor-pointer">
+                            <span class="text-slate-700">{{ option.text }}</span>
+                        </div>
+                    </div>
+                    <div *ngIf="question.type === 'multiple-choice'" class="space-y-2 mt-4">
+                        <div *ngFor="let option of question.options; let j = index" 
+                             (click)="onAnswerSelect(i, j, true)"
+                             class="flex items-center p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors"
+                             [ngClass]="{'border-violet-500 bg-violet-50': isOptionSelected(i, j)}">
+                            <input type="checkbox" [checked]="isOptionSelected(i, j)" (click)="$event.stopPropagation()" class="mr-3 h-5 w-5 rounded text-violet-600 focus:ring-violet-500 cursor-pointer">
+                            <span class="text-slate-700">{{ option.text }}</span>
+                        </div>
+                    </div>
+                    <div *ngIf="question.type === 'text-input'" class="mt-4">
+                        <textarea 
+                            [(ngModel)]="userAnswers[i].textAnswer"
+                            (ngModelChange)="onTextAnswerChange(i, $event)"
+                            class="w-full px-4 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none transition" 
+                            rows="3" 
+                            placeholder="Type your answer here..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-3">
+                <button (click)="closeExamModal()" class="px-6 py-2.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button (click)="submitExam()" [disabled]="isSubmittingAssignment" class="px-7 py-2.5 bg-violet-600 text-white rounded-lg font-semibold hover:bg-violet-700 disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-violet-300 transition-all">
+                    <i class="fa-solid fa-paper-plane mr-2"></i>
+                    <span *ngIf="!isSubmittingAssignment">Submit Assignment</span>
+                    <span *ngIf="isSubmittingAssignment">Submitting...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Modal -->
+<div *ngIf="showResultModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-gradient-to-r from-violet-50 to-purple-50 rounded-t-2xl border-b border-slate-200">
+            <div>
+                <h3 class="text-xl font-bold text-slate-900" *ngIf="currentExamAssignment">{{ currentExamAssignment.title }} - Results</h3>
+                <p class="text-sm text-slate-500 mt-1" *ngIf="assignmentResult">Submitted on {{ assignmentResult.submitted_at | date:'medium' }}</p>
+            </div>
+            <button (click)="closeResultModal()" class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto p-8" *ngIf="assignmentResult && currentExamAssignment">
+            <!-- Score Summary -->
+            <div class="mb-6 p-6 bg-gradient-to-r from-violet-100 to-purple-100 rounded-xl border border-violet-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-lg font-semibold text-slate-900 mb-2">Your Score</h4>
+                        <div class="flex items-baseline gap-3">
+                            <span class="text-4xl font-bold" [ngClass]="{
+                                'text-green-600': assignmentResult.score >= 70,
+                                'text-yellow-600': assignmentResult.score >= 50 && assignmentResult.score < 70,
+                                'text-red-600': assignmentResult.score < 50
+                            }">{{ assignmentResult.score }}%</span>
+                            <span class="text-slate-600">({{ assignmentResult.correct_answers }} / {{ assignmentResult.total_questions }} correct)</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="w-24 h-24 rounded-full flex items-center justify-center" [ngClass]="{
+                            'bg-green-100': assignmentResult.score >= 70,
+                            'bg-yellow-100': assignmentResult.score >= 50 && assignmentResult.score < 70,
+                            'bg-red-100': assignmentResult.score < 50
+                        }">
+                            <i class="fa-solid text-4xl" [ngClass]="{
+                                'fa-check-circle text-green-600': assignmentResult.score >= 70,
+                                'fa-exclamation-circle text-yellow-600': assignmentResult.score >= 50 && assignmentResult.score < 70,
+                                'fa-times-circle text-red-600': assignmentResult.score < 50
+                            }"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Question Results -->
+            <div class="space-y-6">
+                <div *ngFor="let question of currentExamAssignment.questions; let i = index" class="bg-slate-50 rounded-lg p-6 border" 
+                     [ngClass]="{
+                         'border-green-300 bg-green-50/30': getQuestionResult(i)?.isCorrect,
+                         'border-red-300 bg-red-50/30': getQuestionResult(i) && !getQuestionResult(i)!.isCorrect
+                     }">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h4 class="font-semibold text-slate-900">Question {{ i + 1 }}</h4>
+                                <span *ngIf="getQuestionResult(i)?.isCorrect" class="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">
+                                    <i class="fa-solid fa-check mr-1"></i>Correct
+                                </span>
+                                <span *ngIf="getQuestionResult(i) && !getQuestionResult(i)!.isCorrect" class="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded">
+                                    <i class="fa-solid fa-times mr-1"></i>Incorrect
+                                </span>
+                            </div>
+                            <p class="text-slate-700">{{ question.text }}</p>
+                            <p class="text-sm text-slate-500 mt-1" *ngIf="question.helperText">{{ question.helperText }}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">
+                            {{ question.type }}
+                        </span>
+                    </div>
+                    <div *ngIf="question.type === 'single-choice' || question.type === 'multiple-choice'" class="space-y-2 mt-4">
+                        <div *ngFor="let option of question.options; let j = index" 
+                             class="flex items-center p-3 rounded-lg border" 
+                             [ngClass]="{
+                                 'bg-green-100 border-green-500': option.isCorrect && getQuestionResult(i)?.isCorrect,
+                                 'bg-red-100 border-red-500': !option.isCorrect && getQuestionResult(i)?.userAnswers?.includes(j),
+                                 'bg-white border-slate-200': (!option.isCorrect && getQuestionResult(i) && !getQuestionResult(i)!.userAnswers.includes(j)) || (option.isCorrect && getQuestionResult(i) && !getQuestionResult(i)!.isCorrect)
+                             }">
+                            <i class="fa-solid mr-3" 
+                               [ngClass]="{
+                                   'fa-check-circle text-green-600': option.isCorrect && getQuestionResult(i)?.isCorrect,
+                                   'fa-circle text-slate-400': (!option.isCorrect && getQuestionResult(i) && !getQuestionResult(i)!.userAnswers.includes(j)) || (option.isCorrect && getQuestionResult(i) && !getQuestionResult(i)!.isCorrect),
+                                   'fa-times-circle text-red-600': !option.isCorrect && getQuestionResult(i)?.userAnswers?.includes(j)
+                               }"></i>
+                            <span class="flex-1" [ngClass]="{
+                                'font-semibold text-green-700': option.isCorrect && getQuestionResult(i)?.isCorrect,
+                                'font-semibold text-red-700': !option.isCorrect && getQuestionResult(i)?.userAnswers?.includes(j),
+                                'text-slate-700': (!option.isCorrect && (!getQuestionResult(i) || !getQuestionResult(i)!.userAnswers.includes(j))) || (option.isCorrect && getQuestionResult(i) && !getQuestionResult(i)!.isCorrect)
+                            }">
+                                {{ option.text }}
+                            </span>
+                            <span *ngIf="option.isCorrect && getQuestionResult(i)?.isCorrect" class="ml-auto px-2 py-1 text-xs font-semibold bg-green-200 text-green-800 rounded">
+                                Correct Answer
+                            </span>
+                            <span *ngIf="!option.isCorrect && getQuestionResult(i)?.userAnswers?.includes(j)" class="ml-auto px-2 py-1 text-xs font-semibold bg-red-200 text-red-800 rounded">
+                                X Your Answer
+                            </span>
+                        </div>
+                    </div>
+                    <div *ngIf="question.type === 'text-input'" class="mt-4">
+                        <div class="p-3 bg-white rounded-lg border border-slate-300">
+                            <p class="text-sm font-medium text-slate-700 mb-1">Your Answer:</p>
+                            <p class="text-slate-900">{{ getQuestionResult(i)?.userTextAnswer || 'No answer provided' }}</p>
+                            <p class="text-xs text-slate-500 mt-2">Note: Text answers require manual evaluation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end">
+                <button (click)="closeResultModal()" class="px-7 py-2.5 bg-violet-600 text-white rounded-lg font-semibold hover:bg-violet-700 shadow-lg hover:shadow-violet-300 transition-all">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feedback View Modal -->
+<div *ngIf="showFeedbackModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-t-2xl border-b border-slate-200">
+            <h3 class="text-xl font-bold text-slate-900">Training Feedback Form</h3>
+            <button (click)="closeFeedbackModal()" class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="max-h-[70vh] overflow-y-auto p-8" *ngIf="viewedFeedback">
+            <div class="space-y-6">
+                <div *ngIf="viewedFeedback.defaultQuestions && viewedFeedback.defaultQuestions.length > 0">
+                    <h4 class="font-semibold text-slate-900 mb-4 text-lg">Default Questions</h4>
+                    <div *ngFor="let question of viewedFeedback.defaultQuestions; let i = index" class="bg-slate-50 rounded-lg p-6 border border-slate-200 mb-4">
+                        <p class="font-medium text-slate-900 mb-3">{{ question.text }}</p>
+                        <div class="space-y-2">
+                            <label *ngFor="let option of question.options" class="flex items-center p-2 bg-white rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                                <input type="radio" [name]="'default-' + i" class="mr-3" [value]="option">
+                                <span class="text-slate-700">{{ option }}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div *ngIf="viewedFeedback.customQuestions && viewedFeedback.customQuestions.length > 0">
+                    <h4 class="font-semibold text-slate-900 mb-4 text-lg">Custom Questions</h4>
+                    <div *ngFor="let question of viewedFeedback.customQuestions; let i = index" class="bg-amber-50 rounded-lg p-6 border border-amber-200 mb-4">
+                        <p class="font-medium text-slate-900 mb-3">{{ question.text }}</p>
+                        <div class="space-y-2">
+                            <label *ngFor="let option of question.options" class="flex items-center p-2 bg-white rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                                <input type="radio" [name]="'custom-' + i" class="mr-3" [value]="option">
+                                <span class="text-slate-700">{{ option }}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 pt-6 border-t border-slate-200 flex justify-end">
+                <button (click)="submitEngineerFeedback()" class="px-6 py-2.5 bg-amber-600 text-white rounded-full font-semibold hover:bg-amber-700 shadow-lg transition-all">
+                    <i class="fa-solid fa-paper-plane mr-2"></i> Submit Feedback
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

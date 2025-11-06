@@ -1,7 +1,7 @@
 # app/models.py
 
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean, Text
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -103,4 +103,46 @@ class TrainingRequest(Base):
     training = relationship("TrainingDetail")
     employee = relationship("User", foreign_keys=[employee_empid])
     manager = relationship("User", foreign_keys=[manager_empid])
+
+class SharedAssignment(Base):
+    __tablename__ = 'shared_assignments'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    trainer_username = Column(String, ForeignKey('users.username'), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    assignment_data = Column(Text, nullable=False)  # JSON string storing questions and options
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    trainer = relationship("User", foreign_keys=[trainer_username])
+
+class SharedFeedback(Base):
+    __tablename__ = 'shared_feedback'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    trainer_username = Column(String, ForeignKey('users.username'), nullable=False)
+    feedback_data = Column(Text, nullable=False)  # JSON string storing feedback questions
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    trainer = relationship("User", foreign_keys=[trainer_username])
+
+class AssignmentSubmission(Base):
+    __tablename__ = 'assignment_submissions'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    shared_assignment_id = Column(Integer, ForeignKey('shared_assignments.id'), nullable=False)
+    employee_empid = Column(String, ForeignKey('users.username'), nullable=False)
+    answers_data = Column(Text, nullable=False)  # JSON string storing user answers
+    score = Column(Integer, nullable=True)  # Score out of 100
+    total_questions = Column(Integer, nullable=False)
+    correct_answers = Column(Integer, nullable=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    shared_assignment = relationship("SharedAssignment")
+    employee = relationship("User", foreign_keys=[employee_empid])
 

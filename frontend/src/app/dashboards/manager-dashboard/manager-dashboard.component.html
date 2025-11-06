@@ -711,41 +711,63 @@
                             </div>
                           </div>
                         </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div class="relative bg-gradient-to-br from-sky-500 to-blue-600 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-calendar-plus absolute -right-4 -bottom-4 text-blue-900/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Schedule Training</h3>
-                                    <p class="text-sky-100 text-sm mb-6">Create and publish new training sessions for the team.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="openScheduleTrainingModal()" class="w-full bg-white text-sky-600 font-bold px-6 py-3 rounded-lg hover:bg-sky-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Schedule New Training
-                                        </button>
-                                    </div>
-                                </div>
+                        <!-- Schedule New Training Button -->
+                        <div class="mb-6">
+                            <button (click)="openScheduleTrainingModal()" class="bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold px-6 py-3 rounded-lg hover:from-sky-600 hover:to-blue-700 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
+                                <i class="fa-solid fa-plus-circle mr-2"></i>Schedule New Training
+                            </button>
+                        </div>
+
+                        <!-- Scheduled Training Sessions List -->
+                        <div class="space-y-4">
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">My Scheduled Training Sessions</h3>
+                            <div *ngIf="myTrainings.length === 0" class="bg-slate-50 rounded-xl p-8 text-center border-2 border-dashed border-slate-300">
+                                <i class="fa-solid fa-calendar-xmark text-4xl text-slate-400 mb-3"></i>
+                                <p class="text-slate-600 font-medium">No training sessions scheduled yet.</p>
+                                <p class="text-slate-500 text-sm mt-1">Click "Schedule New Training" to create your first session.</p>
                             </div>
-                
-                            <div class="relative bg-gradient-to-br from-indigo-500 to-violet-500 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-file-alt absolute -right-4 -bottom-4 text-violet-800/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Assignments</h3>
-                                    <p class="text-violet-100 text-sm mb-6">Create and distribute assignments for a training.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="setTrainerZoneView('assignmentForm')" class="w-full bg-white text-indigo-600 font-bold px-6 py-3 rounded-lg hover:bg-violet-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Create Assignment
-                                        </button>
+                            <div *ngIf="myTrainings.length > 0" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4" [@listStagger]="myTrainings.length">
+                                <div *ngFor="let training of myTrainings"
+                                    class="bg-white/70 backdrop-blur-sm p-2.5 rounded-2xl shadow-lg border border-slate-200/60 transform hover:-translate-y-1 transition-all duration-300 hover:shadow-xl flex flex-col gap-2">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-start gap-2">
+                                            <div class="w-9 h-9 bg-sky-100 text-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i [ngClass]="getTrainingCardIcon(training.skill)" class="text-lg"></i>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-xs font-bold text-slate-800">{{ training.training_name }}</h3>
+                                                <p class="text-[10px] text-slate-500">by {{ training.trainer_name }}</p>
+                                            </div>
+                                        </div>
+                                        <span *ngIf="isUpcoming(training.training_date)" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200">
+                                            <i class="fa-solid fa-clock mr-1"></i> Upcoming
+                                        </span>
                                     </div>
-                                </div>
-                            </div>
-                
-                            <div class="relative bg-gradient-to-br from-yellow-500 to-amber-500 rounded-2xl p-8 text-white shadow-xl overflow-hidden transform transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl flex flex-col">
-                                <i class="fa-solid fa-comments absolute -right-4 -bottom-4 text-amber-800/20 text-[120px] transform rotate-[-15deg]"></i>
-                                <div class="relative z-10 flex flex-col h-full">
-                                    <h3 class="text-2xl font-bold mb-2">Feedback Questions</h3>
-                                    <p class="text-amber-100 text-sm mb-6">Create a set of questions to gather feedback on a training.</p>
-                                    <div class="mt-auto">
-                                        <button (click)="setTrainerZoneView('feedbackForm')" class="w-full bg-white text-yellow-600 font-bold px-6 py-3 rounded-lg hover:bg-yellow-100 hover:shadow-lg transition-all duration-200 transform hover:scale-105">
-                                            <i class="fa-solid fa-plus-circle mr-2"></i>Create Feedback Form
+                                    <div class="border-t border-slate-200/80"></div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <div class="flex items-center gap-1.5 text-slate-600">
+                                            <i class="fa-solid fa-calendar-days text-slate-400"></i>
+                                            <span class="font-semibold text-slate-800">{{ training.training_date ? (training.training_date | date:'fullDate') : 'Date TBD' }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 text-slate-600">
+                                            <i class="fa-solid fa-clock text-slate-400"></i>
+                                            <span class="font-semibold text-slate-800">{{ training.time || 'Time TBD' }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                                        <span *ngIf="training.training_type" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-display mr-1"></i>{{ training.training_type }}</span>
+                                        <span *ngIf="training.skill_category" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-layer-group mr-1"></i>{{ training.skill_category }}</span>
+                                        <span *ngIf="training.skill" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-code mr-1"></i>{{ training.skill }}</span>
+                                    </div>
+                                    <div *ngIf="training.training_topics" class="text-[10px] text-slate-600 pt-1 line-clamp-2">
+                                        {{ training.training_topics }}
+                                    </div>
+                                    <div class="mt-auto pt-2 border-t border-slate-200/80 flex items-center gap-2">
+                                        <button (click)="openShareAssignment(training.id)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-file-lines mr-1.5"></i>Share Assignment
+                                        </button>
+                                        <button (click)="openShareFeedback(training.id)" class="flex-1 bg-amber-500 text-white font-semibold py-1 rounded-lg hover:bg-amber-700 transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-comment-dots mr-1.5"></i>Share Feedback
                                         </button>
                                     </div>
                                 </div>
@@ -765,10 +787,13 @@
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label class="block text-sm font-medium text-slate-700 mb-2">Training Name *</label>
-                                        <select [(ngModel)]="newAssignment.trainingId" name="assignmentTraining" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                                        <select [(ngModel)]="newAssignment.trainingId" name="assignmentTraining" [disabled]="newAssignment.trainingId !== null" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:bg-slate-100 disabled:cursor-not-allowed">
                                             <option [ngValue]="null">Select a Training</option>
-                                            <option *ngFor="let t of allTrainings" [value]="t.id">{{ t.training_name }}</option>
+                                            <option *ngFor="let t of myTrainings" [value]="t.id">{{ t.training_name }}</option>
                                         </select>
+                                        <p *ngIf="newAssignment.trainingId !== null" class="text-xs text-slate-500 mt-1">
+                                            <i class="fa-solid fa-info-circle mr-1"></i>Training pre-selected from your scheduled sessions
+                                        </p>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-slate-700 mb-2">Assignment Title *</label>
@@ -857,10 +882,13 @@
                             <div class="space-y-4">
                                 <div>
                                     <label class="block text-sm font-medium text-slate-700 mb-2">Training Name *</label>
-                                    <select [(ngModel)]="newFeedback.trainingId" name="feedbackTraining" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition">
+                                    <select [(ngModel)]="newFeedback.trainingId" name="feedbackTraining" [disabled]="newFeedback.trainingId !== null" class="w-full px-4 py-2.5 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition disabled:bg-slate-100 disabled:cursor-not-allowed">
                                         <option [ngValue]="null">Select a Training</option>
-                                        <option *ngFor="let t of allTrainings" [value]="t.id">{{ t.training_name }}</option>
+                                        <option *ngFor="let t of myTrainings" [value]="t.id">{{ t.training_name }}</option>
                                     </select>
+                                    <p *ngIf="newFeedback.trainingId !== null" class="text-xs text-slate-500 mt-1">
+                                        <i class="fa-solid fa-info-circle mr-1"></i>Training pre-selected from your scheduled sessions
+                                    </p>
                                 </div>
 
                                 <div>
