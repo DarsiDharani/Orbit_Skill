@@ -108,3 +108,41 @@ async def get_my_assigned_trainings(
         }
 
     return [serialize(t) for t in trainings]
+
+@router.get("/manager/team")
+async def get_team_assigned_trainings(
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Returns all training assignments for the manager's team members.
+    Returns a list of assignments with training_id and employee_empid for duplicate checking.
+    """
+    manager_username = current_user.get("username")
+    
+    # Get all team member IDs for this manager
+    team_members_stmt = select(models.ManagerEmployee.employee_empid).where(
+        models.ManagerEmployee.manager_empid == manager_username
+    )
+    team_result = await db.execute(team_members_stmt)
+    team_member_ids = [row[0] for row in team_result.all()]
+    
+    if not team_member_ids:
+        return []
+    
+    # Get all assignments for team members managed by this manager
+    assignments_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.employee_empid.in_(team_member_ids),
+        models.TrainingAssignment.manager_empid == manager_username
+    )
+    assignments_result = await db.execute(assignments_stmt)
+    assignments = assignments_result.scalars().all()
+    
+    # Return simple structure for duplicate checking
+    return [
+        {
+            "training_id": assignment.training_id,
+            "employee_empid": assignment.employee_empid
+        }
+        for assignment in assignments
+    ]

@@ -19,7 +19,6 @@ import { AboutComponent } from './components/about/about.component';
 import { EngineerDashboardComponent } from './dashboards/engineer-dashboard/engineer-dashboard.component';
 import { ManagerDashboardComponent } from './dashboards/manager-dashboard/manager-dashboard.component';
 import { SkillFilterPipe } from './pipes/skill-filter.pipe';
-import { DirectivesDirective } from './directives.directive';
 import { ToastComponent } from './components/toast/toast.component';
 
 @NgModule({
@@ -33,7 +32,6 @@ import { ToastComponent } from './components/toast/toast.component';
     EngineerDashboardComponent,
     ManagerDashboardComponent,
     SkillFilterPipe,
-    DirectivesDirective,
     ToastComponent,
   ],
   imports: [
@@ -45,7 +43,6 @@ import { ToastComponent } from './components/toast/toast.component';
     CommonModule,
     BrowserAnimationsModule,
     MatSnackBarModule,
-    BrowserAnimationsModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

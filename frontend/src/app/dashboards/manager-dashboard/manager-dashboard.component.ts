@@ -4,6 +4,8 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { trigger, style, animate, transition, query, stagger } from '@angular/animations';
 import { ToastService, ToastMessage } from '../../services/toast.service';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 
 interface Competency {
   skill: string;
@@ -74,6 +76,28 @@ interface TrainingRequest {
         username: string;
         name?: string;
     };
+}
+
+interface TeamAssignmentSubmission {
+    id: number;
+    training_id: number;
+    training_name: string;
+    employee_empid: string;
+    employee_name: string;
+    score: number;
+    total_questions: number;
+    correct_answers: number;
+    submitted_at: string;
+}
+
+interface TeamFeedbackSubmission {
+    id: number;
+    training_id: number;
+    training_name: string;
+    employee_empid: string;
+    employee_name: string;
+    responses: Array<{ questionIndex: number; questionText: string; selectedOption: string }>;
+    submitted_at: string;
 }
 
 interface CalendarEvent {
@@ -185,11 +209,24 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   editingSkill: { memberId: string, skillIndex: number } | null = null;
   editSkillData: { current_expertise: string, target_expertise: string } = { current_expertise: '', target_expertise: '' };
 
-  selectedTraining: number | null = null;
-  selectedMemberId: string | null = null;
+  selectedTrainingIds: number[] = [];
+  selectedMemberIds: string[] = [];
 
   assignTrainingSearch: string = '';
   assignMemberSearch: string = '';
+
+  // Success modal properties
+  showAssignmentSuccessModal: boolean = false;
+  assignmentSuccessData: { trainingNames: string[]; memberNames: string[]; totalAssignments: number } | null = null;
+  isAssigningTraining: boolean = false;
+  
+  // Duplicate assignments modal
+  showDuplicateModal: boolean = false;
+  duplicateAssignments: { training: string; member: string }[] = [];
+  pendingValidAssignments: { trainingId: number; memberId: string; trainingName: string; memberName: string }[] = [];
+  
+  // Existing assignments for duplicate checking (format: "trainingId_employeeId")
+  existingAssignments: Set<string> = new Set();
 
   mySkillsStatusFilter: 'All' | 'Met' | 'Gap' = 'All';
   mySkillsSkillFilter: 'All' | string = 'All';
@@ -211,6 +248,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   skillLevelsForFilter: string[] = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'];
   
   skillCategoryLevels: string[] = ['L1', 'L2', 'L3', 'L4', 'L5'];
+  skillNames: string[] = [];
 
   additionalSkills: any[] = [];
   newSkill = {
@@ -253,6 +291,12 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   // --- Trainer Zone Properties ---
   isTrainer: boolean = false;
   trainerZoneView: 'overview' | 'assignmentForm' | 'feedbackForm' = 'overview';
+  sharedAssignments: Map<number, boolean> = new Map(); // Track which trainings have assignments shared
+  sharedFeedback: Map<number, boolean> = new Map(); // Track which trainings have feedback shared
+  assignmentSharedBy: Map<number, string> = new Map(); // Track who shared the assignment
+  feedbackSharedBy: Map<number, string> = new Map(); // Track who shared the feedback
+  private _myTrainingsCache: TrainingDetail[] = [];
+  private _myTrainingsCacheKey: string = '';
   
   // Assignment and Feedback Forms
   newAssignment: Assignment = {
@@ -304,6 +348,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   modalData: any[] = [];
   modalDataType: 'members' | 'skills' | null = null;
 
+  // Team submissions
+  teamAssignmentSubmissions: TeamAssignmentSubmission[] = [];
+  teamFeedbackSubmissions: TeamFeedbackSubmission[] = [];
+  isLoadingSubmissions: boolean = false;
 
   private readonly API_ENDPOINT = 'http://localhost:8000/data/manager/dashboard';
 
@@ -433,10 +481,12 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.loadPinnedItems();
     this.fetchDashboardData();
     this.fetchTrainingCatalog();
+    this.fetchScheduledTrainings();
     this.fetchAssignedTrainings();
     this.fetchAssignedTrainingsCount();
     this.fetchTeamAssignedTrainings();
     this.fetchPendingRequests();
+    this.fetchTeamSubmissions();
   }
 
   fetchAssignedTrainingsCount(): void {
@@ -466,6 +516,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     if (tabName === 'trainingCatalog' || tabName === 'assignTraining' || tabName === 'trainerZone') {
         this.fetchTrainingCatalog();
     }
+    if (tabName === 'trainerZone') {
+      // Refresh scheduled trainings when switching to Trainer Zone to show latest sessions
+      this.fetchScheduledTrainings();
+    }
     if (tabName === 'assignedTrainings') {
         this.fetchAssignedTrainings();
     }
@@ -492,6 +546,9 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     // It's already called in ngOnInit(), so the data is loaded once when the component
     // initializes, which is more efficient.
     this.dashboardView = this.dashboardView === 'personal' ? 'team' : 'personal';
+    if (this.dashboardView === 'team') {
+      this.fetchTeamSubmissions(); // Refresh submissions when switching to team view
+    }
   }
 
   // Pin-to-pin feature methods
@@ -623,22 +680,59 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
-    this.http.get<TrainingDetail[]>('http://localhost:8000/assignments/manager/team', { headers }).subscribe({
+    this.http.get<{training_id: number; employee_empid: string}[]>('http://localhost:8000/assignments/manager/team', { headers }).subscribe({
       next: (response) => {
         console.log('Team assigned trainings loaded:', response);
-        this.teamAssignedTrainings = response || [];
+        // Store existing assignments in a Set for quick duplicate checking
+        this.existingAssignments.clear();
+        (response || []).forEach((assignment: {training_id: number; employee_empid: string}) => {
+          const key = `${assignment.training_id}_${assignment.employee_empid}`;
+          this.existingAssignments.add(key);
+        });
+        // Also store full training details if needed
+        this.teamAssignedTrainings = [];
       },
       error: (err) => {
         console.error('Failed to fetch team assigned trainings:', err);
+        this.existingAssignments.clear();
         this.teamAssignedTrainings = [];
+      }
+    });
+  }
+
+  // Fetch team assignment and feedback submissions
+  fetchTeamSubmissions(): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    this.isLoadingSubmissions = true;
+    
+    // Fetch both assignment and feedback submissions
+    forkJoin({
+      assignments: this.http.get<TeamAssignmentSubmission[]>('http://localhost:8000/shared-content/manager/team/assignments', { headers }).pipe(
+        catchError(() => of([]))
+      ),
+      feedback: this.http.get<TeamFeedbackSubmission[]>('http://localhost:8000/shared-content/manager/team/feedback', { headers }).pipe(
+        catchError(() => of([]))
+      )
+    }).subscribe({
+      next: (results) => {
+        this.teamAssignmentSubmissions = results.assignments;
+        this.teamFeedbackSubmissions = results.feedback;
+        this.isLoadingSubmissions = false;
+      },
+      error: (err) => {
+        console.error('Failed to fetch team submissions:', err);
+        this.teamAssignmentSubmissions = [];
+        this.teamFeedbackSubmissions = [];
+        this.isLoadingSubmissions = false;
       }
     });
   }
   
   openScheduleTrainingModal(): void {
-    if (this.manager) {
-      this.newTraining.trainer_name = this.manager.name;
-    }
+    this.newTraining.trainer_name = this.managerDisplayName || this.manager?.name || this.manager?.id || this.authService.getUsername() || '';
     this.showScheduleTrainingModal = true;
   }
 
@@ -750,9 +844,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
 
     this.http.post('http://localhost:8000/trainings/', payload, { headers }).subscribe({
         next: (response) => {
-            alert('Training scheduled successfully!');
+            this.toastService.success('Training scheduled successfully!');
             this.closeScheduleTrainingModal();
             this.fetchTrainingCatalog();
+            this.fetchScheduledTrainings();
         },
         error: (err) => {
             if (err.status === 422 && err.error && err.error.detail) {
@@ -836,6 +931,33 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     });
   }
 
+  fetchScheduledTrainings(): void {
+    const token = this.authService.getToken();
+    if (!token) {
+        return;
+    }
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+
+    this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
+      next: (response) => {
+        this.allTrainings = response;
+        // Clear cache when trainings are updated
+        this._myTrainingsCache = [];
+        this._myTrainingsCacheKey = '';
+        this.allTrainingsCalendarEvents = this.allTrainings
+            .filter(t => t.training_date)
+            .map(t => ({
+                date: new Date(t.training_date as string),
+                title: t.training_name,
+                trainer: t.trainer_name || 'N/A'
+            }));
+      },
+      error: (err) => {
+        console.error('Failed to fetch scheduled trainings:', err);
+      }
+    });
+  }
+
   fetchPendingRequests(): void {
     const token = this.authService.getToken();
     if (!token) return;
@@ -907,14 +1029,63 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   }
 
   get myTrainings(): TrainingDetail[] {
-    if (!this.manager) return [];
-    return this.trainingCatalog
-      .filter(t => t.trainer_name === this.manager?.name)
+    // Backend stores trainer_name as username (manager id), so prioritize matching against manager id
+    const managerId = this.manager?.id || this.authService.getUsername() || '';
+    const managerName = this.managerDisplayName || this.manager?.name || '';
+    
+    if (!managerId && !managerName) {
+      return [];
+    }
+    
+    // Use cache to prevent repeated calculations during change detection
+    const cacheKey = `${managerId}-${managerName}-${this.allTrainings.length}`;
+    if (this._myTrainingsCacheKey === cacheKey && this._myTrainingsCache.length >= 0) {
+      return this._myTrainingsCache;
+    }
+    
+    const mgrId = String(managerId).trim();
+    const mgrName = (managerName || '').trim();
+    
+    // Filter: Match against managerId first (what backend stores), then managerName as fallback
+    const filtered = this.allTrainings
+      .filter(t => {
+        const trainerName = String(t.trainer_name || '').trim();
+        if (!trainerName) return false;
+        
+        // Normalize all strings for comparison
+        const trainerNameLower = trainerName.toLowerCase();
+        const mgrIdLower = mgrId.toLowerCase();
+        const mgrNameLower = mgrName.toLowerCase();
+        
+        // Primary match: managerId (username) - exact match (case-insensitive)
+        const matchesId = trainerNameLower === mgrIdLower;
+        
+        // Fallback match: managerName (for trainings imported via Excel or other sources)
+        const matchesName = mgrName && mgrNameLower.length > 0 && trainerNameLower === mgrNameLower;
+        
+        // Additional: Check if trainer_name contains the managerId (for partial matches)
+        const containsId = mgrIdLower.length > 0 && trainerNameLower.includes(mgrIdLower);
+        
+        // Additional: Check if trainer_name contains the managerName (for partial matches)
+        const containsName = mgrName && mgrNameLower.length > 0 && trainerNameLower.includes(mgrNameLower);
+        
+        return matchesId || matchesName || containsId || containsName;
+      })
       .sort((a, b) => {
         const dateA = a.training_date ? new Date(a.training_date).getTime() : 0;
         const dateB = b.training_date ? new Date(b.training_date).getTime() : 0;
         return dateB - dateA; // Sort descending
       });
+    
+    // Update cache
+    this._myTrainingsCache = filtered;
+    this._myTrainingsCacheKey = cacheKey;
+    // Check shared status for all trainings
+    filtered.forEach(training => {
+      this.checkSharedStatus(training.id);
+    });
+    
+    return filtered;
   }
 
   isUpcoming(dateStr?: string): boolean {
@@ -988,6 +1159,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   extractUniqueMySkills(): void {
     if (this.manager && this.manager.skills) {
       this.uniqueMySkills = [...new Set(this.manager.skills.map(skill => skill.skill))];
+      this.skillNames = Array.from(new Set(this.manager.skills.map(skill => skill.skill))).sort();
     }
   }
 
@@ -1023,45 +1195,291 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   }
 
   assignTraining(): void {
-    if (!this.selectedTraining) {
-      this.toastService.warning('Please select a training module.');
+    if (!this.selectedTrainingIds || this.selectedTrainingIds.length === 0) {
+      this.toastService.warning('Please select at least one training module.');
       return;
     }
-    if (!this.selectedMemberId) {
-      this.toastService.warning('Please select a team member.');
+    if (!this.selectedMemberIds || this.selectedMemberIds.length === 0) {
+      this.toastService.warning('Please select at least one team member.');
       return;
     }
-    const trainingName = this.trainingCatalog.find(t => t.id === this.selectedTraining)?.training_name;
-    const memberName = this.manager?.team.find(m => m.id === this.selectedMemberId)?.name;
+    
+    // Filter out already assigned combinations - only process valid assignments
+    const validAssignments: { trainingId: number; memberId: string; trainingName: string; memberName: string }[] = [];
+    
+    this.selectedTrainingIds.forEach(trainingId => {
+      const training = this.trainingCatalog.find(t => t.id === trainingId);
+      const trainingName = training?.training_name || 'Unknown Training';
+      
+      this.selectedMemberIds.forEach(memberId => {
+        const member = this.manager?.team.find(m => m.id === memberId);
+        const memberName = member?.name || 'Unknown';
+        
+        // Only add if not already assigned
+        if (!this.isAlreadyAssigned(trainingId, memberId)) {
+          validAssignments.push({ trainingId, memberId, trainingName, memberName });
+        }
+      });
+    });
+    
+    // If no valid assignments after filtering duplicates
+    if (validAssignments.length === 0) {
+      this.toastService.warning('All selected assignments already exist. Please select different training or team members.');
+      return;
+    }
+    
+    // Proceed with valid assignments only
+    const trainingNames: string[] = [];
+    const memberNames: string[] = [];
+    const failedAssignments: { training: string; member: string }[] = [];
+    let completedCount = 0;
 
     const token = this.authService.getToken();
     if (!token) {
       this.toastService.error('Authentication token missing. Please login again.');
       return;
     }
+    
+    this.isAssigningTraining = true;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    const payload = { training_id: this.selectedTraining, employee_username: this.selectedMemberId };
-    this.http.post('http://localhost:8000/assignments/', payload, { headers }).subscribe({
-      next: () => {
-        this.toastService.success(`Assigned "${trainingName}" to ${memberName}`);
-        this.selectedTraining = null;
-        this.selectedMemberId = null;
+    
+    // Create array of observables only for valid (non-duplicate) assignments
+    const assignmentObservables: any[] = [];
+    
+    validAssignments.forEach(({ trainingId, memberId, trainingName, memberName }) => {
+      if (!trainingNames.includes(trainingName)) {
+        trainingNames.push(trainingName);
+      }
+      if (!memberNames.includes(memberName)) {
+        memberNames.push(memberName);
+      }
+      
+      const payload = { training_id: trainingId, employee_username: memberId };
+      assignmentObservables.push(
+        this.http.post('http://localhost:8000/assignments/', payload, { headers }).pipe(
+          map(() => {
+            // Add to existing assignments to prevent immediate re-assignment
+            const key = `${trainingId}_${memberId}`;
+            this.existingAssignments.add(key);
+            return { success: true, trainingName, memberName };
+          }),
+          catchError((err) => {
+            // Check if it's a duplicate error (400)
+            if (err.status === 400 && err.error?.detail?.includes('already assigned')) {
+              const key = `${trainingId}_${memberId}`;
+              this.existingAssignments.add(key);
+            }
+            return of({ success: false, trainingName, memberName, error: err });
+          })
+        )
+      );
+    });
+
+    // Execute all assignments in parallel using forkJoin
+    forkJoin(assignmentObservables).subscribe({
+      next: (results) => {
+        this.isAssigningTraining = false;
+        
+        // Count successful assignments
+        const successfulNames: string[] = [];
+        results.forEach((result: any) => {
+          if (result.success) {
+            completedCount++;
+            if (!successfulNames.includes(result.memberName)) {
+              successfulNames.push(result.memberName);
+            }
+          } else {
+            failedAssignments.push({ training: result.trainingName, member: result.memberName });
+          }
+        });
+        
+        if (completedCount > 0) {
+          // Refresh team assigned trainings to update the list
+          this.fetchTeamAssignedTrainings();
+          
+          // Show success modal
+          this.assignmentSuccessData = {
+            trainingNames: [...new Set(trainingNames)],
+            memberNames: successfulNames,
+            totalAssignments: completedCount
+          };
+          this.showAssignmentSuccessModal = true;
+          
+          // Reset selections
+          this.selectedTrainingIds = [];
+          this.selectedMemberIds = [];
+          
+          // Show toasts for results
+          // Note: duplicateAssignments info is already shown in the modal
+          if (failedAssignments.length > 0) {
+            this.toastService.warning(`${failedAssignments.length} assignment(s) failed. Please try again.`);
+          } else {
+            this.toastService.success(`Successfully assigned ${completedCount} training(s)!`);
+          }
+        } else {
+          const msg = failedAssignments.length > 0 ? 'All assignments failed. Please try again.' : 'Failed to assign training.';
+          this.toastService.error(msg);
+        }
       },
       error: (err) => {
-        const msg = err.error?.detail || 'Failed to assign training.';
-        this.toastService.error(msg);
+        this.isAssigningTraining = false;
+        console.error('Error assigning trainings:', err);
+        this.toastService.error('Failed to assign trainings. Please try again.');
       }
     });
   }
-
-  getSelectedTrainingName(): string {
-    if (!this.selectedTraining) return '...';
-    return this.trainingCatalog.find(t => t.id === this.selectedTraining)?.training_name || '...';
+  
+  closeDuplicateModal(): void {
+    this.showDuplicateModal = false;
+    this.duplicateAssignments = [];
+    this.pendingValidAssignments = [];
+  }
+  
+  confirmProceedWithAssignments(): void {
+    this.showDuplicateModal = false;
+    const validAssignments = this.pendingValidAssignments;
+    this.duplicateAssignments = [];
+    this.pendingValidAssignments = [];
+    
+    if (validAssignments.length === 0) {
+      this.toastService.warning('No valid assignments to proceed with.');
+      return;
+    }
+    
+    // Process assignments inline (duplicate modal is kept for backward compatibility but not used in new flow)
+    // This method is only called if the duplicate modal is shown, which shouldn't happen with the new inline indicators
+    // But keeping it for safety
+    this.toastService.info('Please use the inline indicators to see duplicate assignments. This modal is deprecated.');
   }
 
-  getSelectedMemberName(): string {
-    if (!this.selectedMemberId || !this.manager) return '...';
-    return this.manager.team.find(m => m.id === this.selectedMemberId)?.name || '...';
+  toggleTrainingSelection(trainingId: number): void {
+    const index = this.selectedTrainingIds.indexOf(trainingId);
+    if (index > -1) {
+      this.selectedTrainingIds.splice(index, 1);
+    } else {
+      this.selectedTrainingIds.push(trainingId);
+    }
+  }
+  
+  isAlreadyAssigned(trainingId: number, memberId: string): boolean {
+    const assignmentKey = `${trainingId}_${memberId}`;
+    return this.existingAssignments.has(assignmentKey);
+  }
+  
+  getAlreadyAssignedMembersForTraining(trainingId: number): string[] {
+    const assignedMembers: string[] = [];
+    this.manager?.team.forEach(member => {
+      if (this.isAlreadyAssigned(trainingId, member.id)) {
+        assignedMembers.push(member.name);
+      }
+    });
+    return assignedMembers;
+  }
+  
+  getAlreadyAssignedTrainingsForMember(memberId: string): string[] {
+    const assignedTrainings: string[] = [];
+    this.trainingCatalog.forEach(training => {
+      if (this.isAlreadyAssigned(training.id, memberId)) {
+        assignedTrainings.push(training.training_name);
+      }
+    });
+    return assignedTrainings;
+  }
+  
+  getSelectedTrainingsAlreadyAssignedForMember(memberId: string): string[] {
+    const alreadyAssigned: string[] = [];
+    this.selectedTrainingIds.forEach(trainingId => {
+      if (this.isAlreadyAssigned(trainingId, memberId)) {
+        const training = this.trainingCatalog.find(t => t.id === trainingId);
+        if (training) {
+          alreadyAssigned.push(training.training_name);
+        }
+      }
+    });
+    return alreadyAssigned;
+  }
+  
+  canAssignTrainingToMember(trainingId: number, memberId: string): boolean {
+    return !this.isAlreadyAssigned(trainingId, memberId);
+  }
+  
+  getSelectedMembersAlreadyAssigned(trainingId: number): string[] {
+    const alreadyAssigned: string[] = [];
+    this.selectedMemberIds.forEach(memberId => {
+      if (this.isAlreadyAssigned(trainingId, memberId)) {
+        const member = this.manager?.team.find(m => m.id === memberId);
+        if (member) {
+          alreadyAssigned.push(member.name);
+        }
+      }
+    });
+    return alreadyAssigned;
+  }
+
+  isTrainingSelected(trainingId: number): boolean {
+    return this.selectedTrainingIds.includes(trainingId);
+  }
+
+  selectAllTrainings(): void {
+    this.selectedTrainingIds = this.filteredAssignTrainings.map(t => t.id);
+  }
+
+  clearAllTrainings(): void {
+    this.selectedTrainingIds = [];
+  }
+
+  toggleMemberSelection(memberId: string): void {
+    const index = this.selectedMemberIds.indexOf(memberId);
+    if (index > -1) {
+      this.selectedMemberIds.splice(index, 1);
+    } else {
+      this.selectedMemberIds.push(memberId);
+    }
+  }
+
+  isMemberSelected(memberId: string): boolean {
+    return this.selectedMemberIds.includes(memberId);
+  }
+
+  closeAssignmentSuccessModal(): void {
+    this.showAssignmentSuccessModal = false;
+    this.assignmentSuccessData = null;
+  }
+
+  selectAllMembers(): void {
+    if (this.manager && this.manager.team) {
+      this.selectedMemberIds = this.filteredAssignMembers.map(m => m.id);
+    }
+  }
+
+  clearAllMembers(): void {
+    this.selectedMemberIds = [];
+  }
+
+  getMemberNameById(memberId: string): string {
+    if (!this.manager || !this.manager.team) return '';
+    const member = this.manager.team.find(m => m.id === memberId);
+    return member?.name || '';
+  }
+
+  getSelectedTrainingNames(): string {
+    if (!this.selectedTrainingIds || this.selectedTrainingIds.length === 0) return '...';
+    if (this.selectedTrainingIds.length === 1) {
+      return this.trainingCatalog.find(t => t.id === this.selectedTrainingIds[0])?.training_name || '...';
+    }
+    return `${this.selectedTrainingIds.length} Trainings Selected`;
+  }
+
+  getTrainingNameById(trainingId: number): string {
+    return this.trainingCatalog.find(t => t.id === trainingId)?.training_name || '';
+  }
+
+  getSelectedMemberNames(): string {
+    if (!this.selectedMemberIds || this.selectedMemberIds.length === 0 || !this.manager) return '...';
+    if (this.selectedMemberIds.length === 1) {
+      return this.manager.team.find(m => m.id === this.selectedMemberIds[0])?.name || '...';
+    }
+    return `${this.selectedMemberIds.length} Members Selected`;
   }
 
   calculateProgress(skills: Competency[]): number {
@@ -1124,6 +1542,18 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
 
   getTeamSkillsMetCount(member: TeamMember): number {
     return member.skills.filter(s => s.status === 'Met').length;
+  }
+
+  getTeamSkillsGapCount(member: TeamMember): number {
+    return member.skills.filter(s => s.status === 'Gap').length;
+  }
+
+  getMemberProgressPercentage(member: TeamMember): number {
+    return this.calculateProgress(member.skills);
+  }
+
+  getTotalTeamSkillsCount(): number {
+    return (this.manager?.team || []).reduce((sum, m) => sum + m.skills.length, 0);
   }
 
   viewMemberDetails(member: TeamMember): void {
@@ -1472,16 +1902,158 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.trainerZoneView = view;
   }
 
+  isAssignmentShared(trainingId: number): boolean {
+    return this.sharedAssignments.get(trainingId) || false;
+  }
+
+  isFeedbackShared(trainingId: number): boolean {
+    return this.sharedFeedback.get(trainingId) || false;
+  }
+
+  checkSharedStatus(trainingId: number): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    // Check if assignment is shared (for trainers)
+    this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.sharedAssignments.set(trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.assignmentSharedBy.set(trainingId, response.trainer_username);
+          }
+        } else {
+          this.sharedAssignments.set(trainingId, false);
+          this.assignmentSharedBy.delete(trainingId);
+        }
+      },
+      error: () => {
+        this.sharedAssignments.set(trainingId, false);
+        this.assignmentSharedBy.delete(trainingId);
+      }
+    });
+    
+    // Check if feedback is shared (for trainers)
+    this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+      next: (response: any) => {
+        if (response) {
+          this.sharedFeedback.set(trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.feedbackSharedBy.set(trainingId, response.trainer_username);
+          }
+        } else {
+          this.sharedFeedback.set(trainingId, false);
+          this.feedbackSharedBy.delete(trainingId);
+        }
+      },
+      error: () => {
+        this.sharedFeedback.set(trainingId, false);
+        this.feedbackSharedBy.delete(trainingId);
+      }
+    });
+  }
+
+  getAssignmentSharedBy(trainingId: number): string {
+    return this.assignmentSharedBy.get(trainingId) || '';
+  }
+
+  getFeedbackSharedBy(trainingId: number): string {
+    return this.feedbackSharedBy.get(trainingId) || '';
+  }
+
   openShareAssignment(trainingId: number): void {
     this.resetNewAssignmentForm();
     this.newAssignment.trainingId = trainingId;
-    this.setTrainerZoneView('assignmentForm');
+    
+    // Check shared status and load existing data if available
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+      this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+        next: (response: any) => {
+          if (response) {
+            // Assignment already exists - load it for editing
+            this.sharedAssignments.set(trainingId, true);
+            if (response.trainer_username) {
+              this.assignmentSharedBy.set(trainingId, response.trainer_username);
+            }
+            
+            // Load existing assignment data
+            this.newAssignment.title = response.title || '';
+            this.newAssignment.description = response.description || '';
+            this.newAssignment.questions = response.questions || [];
+            
+            const currentUser = this.authService.getUsername() || this.manager?.id || '';
+            if (response.trainer_username && response.trainer_username !== currentUser) {
+              this.toastService.info(`Assignment already shared by your co-trainer (${response.trainer_username}). You can update it below.`);
+            } else {
+              this.toastService.info('Loading existing assignment for editing.');
+            }
+          } else {
+            this.sharedAssignments.set(trainingId, false);
+            this.assignmentSharedBy.delete(trainingId);
+          }
+          this.setTrainerZoneView('assignmentForm');
+        },
+        error: () => {
+          this.sharedAssignments.set(trainingId, false);
+          this.assignmentSharedBy.delete(trainingId);
+          this.setTrainerZoneView('assignmentForm');
+        }
+      });
+    } else {
+      this.setTrainerZoneView('assignmentForm');
+    }
   }
 
   openShareFeedback(trainingId: number): void {
     this.resetNewFeedbackForm();
     this.newFeedback.trainingId = trainingId;
-    this.setTrainerZoneView('feedbackForm');
+    
+    // Check shared status and load existing data if available
+    const token = this.authService.getToken();
+    if (token) {
+      const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+      this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+        next: (response: any) => {
+          if (response) {
+            // Feedback already exists - load it for editing
+            this.sharedFeedback.set(trainingId, true);
+            if (response.trainer_username) {
+              this.feedbackSharedBy.set(trainingId, response.trainer_username);
+            }
+            
+            // Load existing feedback data
+            this.newFeedback.customQuestions = (response.customQuestions || []).map((q: any) => ({
+              text: q.text || '',
+              options: q.options || [],
+              isDefault: q.isDefault || false
+            }));
+            
+            const currentUser = this.authService.getUsername() || this.manager?.id || '';
+            if (response.trainer_username && response.trainer_username !== currentUser) {
+              this.toastService.info(`Feedback has already been shared by your co-trainer (${response.trainer_username}). You can update it below.`);
+            } else {
+              this.toastService.info('Loading existing feedback form for editing.');
+            }
+          } else {
+            this.sharedFeedback.set(trainingId, false);
+            this.feedbackSharedBy.delete(trainingId);
+          }
+          this.setTrainerZoneView('feedbackForm');
+        },
+        error: () => {
+          this.sharedFeedback.set(trainingId, false);
+          this.feedbackSharedBy.delete(trainingId);
+          this.setTrainerZoneView('feedbackForm');
+        }
+      });
+    } else {
+      this.setTrainerZoneView('feedbackForm');
+    }
   }
 
   resetNewAssignmentForm(): void {
@@ -1531,18 +2103,43 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     };
 
     this.http.post('http://localhost:8000/shared-content/assignments', payload, { headers }).subscribe({
-      next: () => {
+      next: (response: any) => {
+        if (this.newAssignment.trainingId) {
+          this.sharedAssignments.set(this.newAssignment.trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.assignmentSharedBy.set(this.newAssignment.trainingId, response.trainer_username);
+          }
+        }
         this.toastService.success('Assignment shared successfully!');
         this.setTrainerZoneView('overview');
+        // Refresh the trainings to update the UI
+        if (this.activeTab === 'trainerZone') {
+          this.fetchScheduledTrainings();
+        }
       },
       error: (err) => {
         console.error('Failed to share assignment:', err);
         if (err.status === 403) {
-          this.toastService.error('You can only share assignments for trainings you have scheduled.');
+          if (this.newAssignment.trainingId) {
+            this.checkSharedStatus(this.newAssignment.trainingId);
+            // Use setTimeout to allow checkSharedStatus to complete
+            setTimeout(() => {
+              if (this.isAssignmentShared(this.newAssignment.trainingId!)) {
+                const sharedBy = this.getAssignmentSharedBy(this.newAssignment.trainingId!);
+                this.toastService.warning(`Assignment has already been shared for this training by your co-trainer (${sharedBy}). You can update it by modifying the existing assignment.`);
+              } else {
+                this.toastService.error('You can only share assignments for trainings you have scheduled.');
+              }
+            }, 500);
+          } else {
+            this.toastService.error('You can only share assignments for trainings you have scheduled.');
+          }
         } else if (err.status === 404) {
           this.toastService.error('Training not found.');
         } else {
-          this.toastService.error(`Failed to share assignment. Error: ${err.statusText || 'Unknown error'}`);
+          const errorMessage = err.error?.detail || err.message || err.statusText || 'Unknown error';
+          this.toastService.error(`Failed to share assignment. Error: ${errorMessage}`);
         }
       }
     });
@@ -1635,14 +2232,35 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     };
 
     this.http.post('http://localhost:8000/shared-content/feedback', payload, { headers }).subscribe({
-      next: () => {
+      next: (response: any) => {
+        if (this.newFeedback.trainingId) {
+          this.sharedFeedback.set(this.newFeedback.trainingId, true);
+          // Store who shared it
+          if (response.trainer_username) {
+            this.feedbackSharedBy.set(this.newFeedback.trainingId, response.trainer_username);
+          }
+        }
         this.toastService.success('Feedback form shared successfully!');
         this.setTrainerZoneView('overview');
+        // Refresh the trainings to update the UI
+        if (this.activeTab === 'trainerZone') {
+          this.fetchScheduledTrainings();
+        }
       },
       error: (err) => {
         console.error('Failed to share feedback:', err);
         if (err.status === 403) {
-          this.toastService.error('You can only share feedback for trainings you have scheduled.');
+          if (this.newFeedback.trainingId) {
+            this.checkSharedStatus(this.newFeedback.trainingId!);
+            if (this.isFeedbackShared(this.newFeedback.trainingId!)) {
+              const sharedBy = this.getFeedbackSharedBy(this.newFeedback.trainingId!);
+              this.toastService.warning(`Feedback has already been shared for this training by your co-trainer (${sharedBy}).`);
+            } else {
+              this.toastService.error('You can only share feedback for trainings you have scheduled.');
+            }
+          } else {
+            this.toastService.error('You can only share feedback for trainings you have scheduled.');
+          }
         } else if (err.status === 404) {
           this.toastService.error('Training not found.');
         } else {

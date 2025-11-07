@@ -10,7 +10,7 @@ import json
 
 from app.database import get_db_async
 from app import models
-from app.auth_utils import get_current_active_user
+from app.auth_utils import get_current_active_user, get_current_active_manager
 
 router = APIRouter(
     prefix="/shared-content",
@@ -102,7 +102,7 @@ async def share_assignment(
         )
 
     # Verify the current user is the trainer for this training
-    # trainer_name can contain multiple trainers separated by newlines
+    # trainer_name can contain multiple trainers separated by commas (from Excel) or newlines
     trainer_name = str(training.trainer_name or "").strip()
     if not trainer_name:
         raise HTTPException(
@@ -110,30 +110,71 @@ async def share_assignment(
             detail="Training has no trainer assigned"
         )
     
-    # Get employee name from ManagerEmployee table for additional matching
-    employee_name_result = await db.execute(
+    # Get employee/manager name from ManagerEmployee table for additional matching
+    # Check both employee_empid and manager_empid to support both employees and managers
+    employee_result = await db.execute(
         select(models.ManagerEmployee.employee_name).where(
             models.ManagerEmployee.employee_empid == trainer_username
         )
     )
-    employee_name = employee_name_result.scalar_one_or_none()
+    employee_name = employee_result.scalars().first()
     
-    # Normalize strings for comparison
-    trainer_name_lower = trainer_name.lower()
-    trainer_username_lower = trainer_username.lower()
-    employee_name_lower = (employee_name or "").lower()
-    
-    # Check multiple matching strategies:
-    # 1. Exact match with username
-    # 2. Exact match with employee name
-    # 3. Contains username (for multi-trainer cases)
-    # 4. Contains employee name (for multi-trainer cases)
-    is_trainer = (
-        trainer_name_lower == trainer_username_lower or
-        (employee_name_lower and trainer_name_lower == employee_name_lower) or
-        trainer_username_lower in trainer_name_lower or
-        (employee_name_lower and employee_name_lower in trainer_name_lower)
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        )
     )
+    manager_name = manager_result.scalars().first()
+    
+    display_name = employee_name or manager_name
+    
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    
+    # Split trainer_name by comma (Excel format) or newline, then check each
+    trainer_names = []
+    if ',' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split(',') if t.strip()]
+    elif '\n' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split('\n') if t.strip()]
+    else:
+        trainer_names = [trainer_name.strip()]
+    
+    # Check multiple matching strategies for each trainer name:
+    is_trainer = False
+    for single_trainer_name in trainer_names:
+        trainer_name_lower = single_trainer_name.lower().strip()
+        
+        # 1. Exact match with username
+        if trainer_name_lower == trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 2. Exact match with display name
+        if display_name_lower and trainer_name_lower == display_name_lower:
+            is_trainer = True
+            break
+        
+        # 3. Contains username (for partial matches)
+        if trainer_username_lower in trainer_name_lower or trainer_name_lower in trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 4. Contains display name (for partial matches)
+        if display_name_lower:
+            if display_name_lower in trainer_name_lower or trainer_name_lower in display_name_lower:
+                is_trainer = True
+                break
+        
+        # 5. Check if any part of display name matches (e.g., "Sharib Jawed" matches "Sharib" or "Jawed")
+        if display_name_lower:
+            name_parts = [part.strip() for part in display_name_lower.split() if len(part.strip()) > 2]
+            for part in name_parts:
+                if part in trainer_name_lower or trainer_name_lower in part:
+                    is_trainer = True
+                    break
+            if is_trainer:
+                break
     
     if not is_trainer:
         raise HTTPException(
@@ -228,7 +269,7 @@ async def share_feedback(
         )
 
     # Verify the current user is the trainer for this training
-    # trainer_name can contain multiple trainers separated by newlines
+    # trainer_name can contain multiple trainers separated by commas (from Excel) or newlines
     trainer_name = str(training.trainer_name or "").strip()
     if not trainer_name:
         raise HTTPException(
@@ -236,30 +277,71 @@ async def share_feedback(
             detail="Training has no trainer assigned"
         )
     
-    # Get employee name from ManagerEmployee table for additional matching
-    employee_name_result = await db.execute(
+    # Get employee/manager name from ManagerEmployee table for additional matching
+    # Check both employee_empid and manager_empid to support both employees and managers
+    employee_result = await db.execute(
         select(models.ManagerEmployee.employee_name).where(
             models.ManagerEmployee.employee_empid == trainer_username
         )
     )
-    employee_name = employee_name_result.scalar_one_or_none()
+    employee_name = employee_result.scalars().first()
     
-    # Normalize strings for comparison
-    trainer_name_lower = trainer_name.lower()
-    trainer_username_lower = trainer_username.lower()
-    employee_name_lower = (employee_name or "").lower()
-    
-    # Check multiple matching strategies:
-    # 1. Exact match with username
-    # 2. Exact match with employee name
-    # 3. Contains username (for multi-trainer cases)
-    # 4. Contains employee name (for multi-trainer cases)
-    is_trainer = (
-        trainer_name_lower == trainer_username_lower or
-        (employee_name_lower and trainer_name_lower == employee_name_lower) or
-        trainer_username_lower in trainer_name_lower or
-        (employee_name_lower and employee_name_lower in trainer_name_lower)
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        )
     )
+    manager_name = manager_result.scalars().first()
+    
+    display_name = employee_name or manager_name
+    
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    
+    # Split trainer_name by comma (Excel format) or newline, then check each
+    trainer_names = []
+    if ',' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split(',') if t.strip()]
+    elif '\n' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split('\n') if t.strip()]
+    else:
+        trainer_names = [trainer_name.strip()]
+    
+    # Check multiple matching strategies for each trainer name:
+    is_trainer = False
+    for single_trainer_name in trainer_names:
+        trainer_name_lower = single_trainer_name.lower().strip()
+        
+        # 1. Exact match with username
+        if trainer_name_lower == trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 2. Exact match with display name
+        if display_name_lower and trainer_name_lower == display_name_lower:
+            is_trainer = True
+            break
+        
+        # 3. Contains username (for partial matches)
+        if trainer_username_lower in trainer_name_lower or trainer_name_lower in trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 4. Contains display name (for partial matches)
+        if display_name_lower:
+            if display_name_lower in trainer_name_lower or trainer_name_lower in display_name_lower:
+                is_trainer = True
+                break
+        
+        # 5. Check if any part of display name matches (e.g., "Sharib Jawed" matches "Sharib" or "Jawed")
+        if display_name_lower:
+            name_parts = [part.strip() for part in display_name_lower.split() if len(part.strip()) > 2]
+            for part in name_parts:
+                if part in trainer_name_lower or trainer_name_lower in part:
+                    is_trainer = True
+                    break
+            if is_trainer:
+                break
     
     if not is_trainer:
         raise HTTPException(
@@ -460,24 +542,71 @@ async def get_shared_assignment_for_trainer(
     if not trainer_name:
         return None
     
-    # Get employee name for matching
-    employee_name_result = await db.execute(
+    # Get employee/manager name for matching
+    # Check both employee_empid and manager_empid to support both employees and managers
+    employee_result = await db.execute(
         select(models.ManagerEmployee.employee_name).where(
             models.ManagerEmployee.employee_empid == trainer_username
-        )
+        ).distinct()
     )
-    employee_name = employee_name_result.scalar_one_or_none()
+    employee_name = employee_result.scalar_one_or_none()
     
-    trainer_name_lower = trainer_name.lower()
-    trainer_username_lower = trainer_username.lower()
-    employee_name_lower = (employee_name or "").lower()
-    
-    is_trainer = (
-        trainer_name_lower == trainer_username_lower or
-        (employee_name_lower and trainer_name_lower == employee_name_lower) or
-        trainer_username_lower in trainer_name_lower or
-        (employee_name_lower and employee_name_lower in trainer_name_lower)
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        ).distinct()
     )
+    manager_name = manager_result.scalar_one_or_none()
+    
+    display_name = employee_name or manager_name
+    
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    
+    # Split trainer_name by comma (Excel format) or newline, then check each
+    trainer_names = []
+    if ',' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split(',') if t.strip()]
+    elif '\n' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split('\n') if t.strip()]
+    else:
+        trainer_names = [trainer_name.strip()]
+    
+    # Check multiple matching strategies for each trainer name:
+    is_trainer = False
+    for single_trainer_name in trainer_names:
+        trainer_name_lower = single_trainer_name.lower().strip()
+        
+        # 1. Exact match with username
+        if trainer_name_lower == trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 2. Exact match with display name
+        if display_name_lower and trainer_name_lower == display_name_lower:
+            is_trainer = True
+            break
+        
+        # 3. Contains username (for partial matches)
+        if trainer_username_lower in trainer_name_lower or trainer_name_lower in trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 4. Contains display name (for partial matches)
+        if display_name_lower:
+            if display_name_lower in trainer_name_lower or trainer_name_lower in display_name_lower:
+                is_trainer = True
+                break
+        
+        # 5. Check if any part of display name matches (e.g., "Sharib Jawed" matches "Sharib" or "Jawed")
+        if display_name_lower:
+            name_parts = [part.strip() for part in display_name_lower.split() if len(part.strip()) > 2]
+            for part in name_parts:
+                if part in trainer_name_lower or trainer_name_lower in part:
+                    is_trainer = True
+                    break
+            if is_trainer:
+                break
     
     if not is_trainer:
         raise HTTPException(
@@ -542,24 +671,71 @@ async def get_shared_feedback_for_trainer(
     if not trainer_name:
         return None
     
-    # Get employee name for matching
-    employee_name_result = await db.execute(
+    # Get employee/manager name for matching
+    # Check both employee_empid and manager_empid to support both employees and managers
+    employee_result = await db.execute(
         select(models.ManagerEmployee.employee_name).where(
             models.ManagerEmployee.employee_empid == trainer_username
-        )
+        ).distinct()
     )
-    employee_name = employee_name_result.scalar_one_or_none()
+    employee_name = employee_result.scalar_one_or_none()
     
-    trainer_name_lower = trainer_name.lower()
-    trainer_username_lower = trainer_username.lower()
-    employee_name_lower = (employee_name or "").lower()
-    
-    is_trainer = (
-        trainer_name_lower == trainer_username_lower or
-        (employee_name_lower and trainer_name_lower == employee_name_lower) or
-        trainer_username_lower in trainer_name_lower or
-        (employee_name_lower and employee_name_lower in trainer_name_lower)
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        ).distinct()
     )
+    manager_name = manager_result.scalar_one_or_none()
+    
+    display_name = employee_name or manager_name
+    
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    
+    # Split trainer_name by comma (Excel format) or newline, then check each
+    trainer_names = []
+    if ',' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split(',') if t.strip()]
+    elif '\n' in trainer_name:
+        trainer_names = [t.strip() for t in trainer_name.split('\n') if t.strip()]
+    else:
+        trainer_names = [trainer_name.strip()]
+    
+    # Check multiple matching strategies for each trainer name:
+    is_trainer = False
+    for single_trainer_name in trainer_names:
+        trainer_name_lower = single_trainer_name.lower().strip()
+        
+        # 1. Exact match with username
+        if trainer_name_lower == trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 2. Exact match with display name
+        if display_name_lower and trainer_name_lower == display_name_lower:
+            is_trainer = True
+            break
+        
+        # 3. Contains username (for partial matches)
+        if trainer_username_lower in trainer_name_lower or trainer_name_lower in trainer_username_lower:
+            is_trainer = True
+            break
+        
+        # 4. Contains display name (for partial matches)
+        if display_name_lower:
+            if display_name_lower in trainer_name_lower or trainer_name_lower in display_name_lower:
+                is_trainer = True
+                break
+        
+        # 5. Check if any part of display name matches (e.g., "Sharib Jawed" matches "Sharib" or "Jawed")
+        if display_name_lower:
+            name_parts = [part.strip() for part in display_name_lower.split() if len(part.strip()) > 2]
+            for part in name_parts:
+                if part in trainer_name_lower or trainer_name_lower in part:
+                    is_trainer = True
+                    break
+            if is_trainer:
+                break
     
     if not is_trainer:
         raise HTTPException(
@@ -762,7 +938,8 @@ async def get_assignment_result(
         models.TrainingAssignment.employee_empid == employee_username
     )
     assignment_result = await db.execute(assignment_stmt)
-    assignment = assignment_result.scalar_one_or_none()
+    # Use first() instead of scalar_one_or_none() to handle cases where multiple assignments exist
+    assignment = assignment_result.scalars().first()
 
     if not assignment:
         raise HTTPException(
@@ -839,4 +1016,261 @@ async def get_assignment_result(
         question_results=[QuestionResult(**qr) for qr in question_results],
         submitted_at=submission.submitted_at
     )
+
+# --- Feedback Submission Schemas ---
+
+class FeedbackResponseSubmission(BaseModel):
+    questionIndex: int
+    questionText: str
+    selectedOption: str  # The selected option text
+
+class FeedbackSubmissionCreate(BaseModel):
+    training_id: int
+    shared_feedback_id: int
+    responses: List[FeedbackResponseSubmission]
+
+class FeedbackSubmissionResponse(BaseModel):
+    id: int
+    training_id: int
+    employee_empid: str
+    responses: List[Dict[str, Any]]
+    submitted_at: datetime
+
+    class Config:
+        from_attributes = True
+
+@router.post("/feedback/submit", response_model=FeedbackSubmissionResponse, status_code=status.HTTP_201_CREATED)
+async def submit_feedback(
+    submission_data: FeedbackSubmissionCreate,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Allows engineers to submit their feedback responses for a training.
+    """
+    employee_username = current_user.get("username")
+    if not employee_username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+    # Verify the training is assigned to this employee
+    assignment_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.training_id == submission_data.training_id,
+        models.TrainingAssignment.employee_empid == employee_username
+    )
+    assignment_result = await db.execute(assignment_stmt)
+    assignment = assignment_result.scalar_one_or_none()
+
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only submit feedback for trainings assigned to you"
+        )
+
+    # Get the shared feedback
+    shared_stmt = select(models.SharedFeedback).where(
+        models.SharedFeedback.id == submission_data.shared_feedback_id,
+        models.SharedFeedback.training_id == submission_data.training_id
+    )
+    shared_result = await db.execute(shared_stmt)
+    shared_feedback = shared_result.scalar_one_or_none()
+
+    if not shared_feedback:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Feedback form not found"
+        )
+
+    # Check if feedback already submitted (prevent duplicates)
+    existing_stmt = select(models.FeedbackSubmission).where(
+        models.FeedbackSubmission.training_id == submission_data.training_id,
+        models.FeedbackSubmission.employee_empid == employee_username,
+        models.FeedbackSubmission.shared_feedback_id == submission_data.shared_feedback_id
+    )
+    existing_result = await db.execute(existing_stmt)
+    existing_submission = existing_result.scalar_one_or_none()
+
+    if existing_submission:
+        # Update existing submission
+        responses_json = json.dumps([r.dict() for r in submission_data.responses])
+        existing_submission.responses_data = responses_json
+        await db.commit()
+        await db.refresh(existing_submission)
+        
+        responses_data = json.loads(existing_submission.responses_data)
+        return FeedbackSubmissionResponse(
+            id=existing_submission.id,
+            training_id=existing_submission.training_id,
+            employee_empid=existing_submission.employee_empid,
+            responses=responses_data,
+            submitted_at=existing_submission.submitted_at
+        )
+
+    # Store submission
+    responses_json = json.dumps([r.dict() for r in submission_data.responses])
+    submission = models.FeedbackSubmission(
+        training_id=submission_data.training_id,
+        shared_feedback_id=submission_data.shared_feedback_id,
+        employee_empid=employee_username,
+        responses_data=responses_json
+    )
+    db.add(submission)
+    await db.commit()
+    await db.refresh(submission)
+
+    responses_data = json.loads(submission.responses_data)
+    return FeedbackSubmissionResponse(
+        id=submission.id,
+        training_id=submission.training_id,
+        employee_empid=submission.employee_empid,
+        responses=responses_data,
+        submitted_at=submission.submitted_at
+    )
+
+# --- Manager Endpoints for Team Submissions ---
+
+class TeamAssignmentSubmissionResponse(BaseModel):
+    id: int
+    training_id: int
+    training_name: str
+    employee_empid: str
+    employee_name: str
+    score: int
+    total_questions: int
+    correct_answers: int
+    submitted_at: datetime
+
+class TeamFeedbackSubmissionResponse(BaseModel):
+    id: int
+    training_id: int
+    training_name: str
+    employee_empid: str
+    employee_name: str
+    responses: List[Dict[str, Any]]
+    submitted_at: datetime
+
+@router.get("/manager/team/assignments", response_model=List[TeamAssignmentSubmissionResponse])
+async def get_team_assignment_submissions(
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_manager)
+):
+    """
+    Returns all assignment submissions from team members for trainings assigned by this manager.
+    """
+    manager_username = current_user.get("username")
+    
+    # Get all team member IDs for this manager
+    team_members_stmt = select(models.ManagerEmployee.employee_empid, models.ManagerEmployee.employee_name).where(
+        models.ManagerEmployee.manager_empid == manager_username
+    )
+    team_result = await db.execute(team_members_stmt)
+    team_members = {row[0]: row[1] for row in team_result.all()}
+    
+    if not team_members:
+        return []
+    
+    # Get all assignments for team members managed by this manager
+    assignments_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.employee_empid.in_(list(team_members.keys())),
+        models.TrainingAssignment.manager_empid == manager_username
+    )
+    assignments_result = await db.execute(assignments_stmt)
+    assignments = assignments_result.scalars().all()
+    
+    if not assignments:
+        return []
+    
+    # Get training IDs assigned by this manager
+    training_ids = [assignment.training_id for assignment in assignments]
+    
+    # Get all assignment submissions for these trainings
+    submissions_stmt = select(models.AssignmentSubmission, models.TrainingDetail).join(
+        models.TrainingDetail, models.AssignmentSubmission.training_id == models.TrainingDetail.id
+    ).where(
+        models.AssignmentSubmission.training_id.in_(training_ids),
+        models.AssignmentSubmission.employee_empid.in_(list(team_members.keys()))
+    ).order_by(models.AssignmentSubmission.submitted_at.desc())
+    
+    submissions_result = await db.execute(submissions_stmt)
+    submissions = submissions_result.all()
+    
+    result = []
+    for submission, training in submissions:
+        employee_name = team_members.get(submission.employee_empid, submission.employee_empid)
+        result.append(TeamAssignmentSubmissionResponse(
+            id=submission.id,
+            training_id=submission.training_id,
+            training_name=training.training_name,
+            employee_empid=submission.employee_empid,
+            employee_name=employee_name,
+            score=submission.score or 0,
+            total_questions=submission.total_questions,
+            correct_answers=submission.correct_answers,
+            submitted_at=submission.submitted_at
+        ))
+    
+    return result
+
+@router.get("/manager/team/feedback", response_model=List[TeamFeedbackSubmissionResponse])
+async def get_team_feedback_submissions(
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_manager)
+):
+    """
+    Returns all feedback submissions from team members for trainings assigned by this manager.
+    """
+    manager_username = current_user.get("username")
+    
+    # Get all team member IDs for this manager
+    team_members_stmt = select(models.ManagerEmployee.employee_empid, models.ManagerEmployee.employee_name).where(
+        models.ManagerEmployee.manager_empid == manager_username
+    )
+    team_result = await db.execute(team_members_stmt)
+    team_members = {row[0]: row[1] for row in team_result.all()}
+    
+    if not team_members:
+        return []
+    
+    # Get all assignments for team members managed by this manager
+    assignments_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.employee_empid.in_(list(team_members.keys())),
+        models.TrainingAssignment.manager_empid == manager_username
+    )
+    assignments_result = await db.execute(assignments_stmt)
+    assignments = assignments_result.scalars().all()
+    
+    if not assignments:
+        return []
+    
+    # Get training IDs assigned by this manager
+    training_ids = [assignment.training_id for assignment in assignments]
+    
+    # Get all feedback submissions for these trainings
+    submissions_stmt = select(models.FeedbackSubmission, models.TrainingDetail).join(
+        models.TrainingDetail, models.FeedbackSubmission.training_id == models.TrainingDetail.id
+    ).where(
+        models.FeedbackSubmission.training_id.in_(training_ids),
+        models.FeedbackSubmission.employee_empid.in_(list(team_members.keys()))
+    ).order_by(models.FeedbackSubmission.submitted_at.desc())
+    
+    submissions_result = await db.execute(submissions_stmt)
+    submissions = submissions_result.all()
+    
+    result = []
+    for submission, training in submissions:
+        employee_name = team_members.get(submission.employee_empid, submission.employee_empid)
+        responses_data = json.loads(submission.responses_data)
+        result.append(TeamFeedbackSubmissionResponse(
+            id=submission.id,
+            training_id=submission.training_id,
+            training_name=training.training_name,
+            employee_empid=submission.employee_empid,
+            employee_name=employee_name,
+            responses=responses_data,
+            submitted_at=submission.submitted_at
+        ))
+    
+    return result
 

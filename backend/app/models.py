@@ -146,3 +146,16 @@ class AssignmentSubmission(Base):
     shared_assignment = relationship("SharedAssignment")
     employee = relationship("User", foreign_keys=[employee_empid])
 
+class FeedbackSubmission(Base):
+    __tablename__ = 'feedback_submissions'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    shared_feedback_id = Column(Integer, ForeignKey('shared_feedback.id'), nullable=False)
+    employee_empid = Column(String, ForeignKey('users.username'), nullable=False)
+    responses_data = Column(Text, nullable=False)  # JSON string storing feedback responses
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    shared_feedback = relationship("SharedFeedback")
+    employee = relationship("User", foreign_keys=[employee_empid])
+

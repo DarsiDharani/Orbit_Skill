@@ -14,7 +14,12 @@ export class AuthService {
   }
 
   logout() {
-    localStorage.clear(); // Clears all items
+    // Only clear authentication-related data, preserve other application data
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('username');
+    // Note: We intentionally keep other localStorage items that might be needed
+    // for application state or user preferences
   }
 
   isLoggedIn(): boolean {

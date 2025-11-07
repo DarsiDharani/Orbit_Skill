@@ -57,12 +57,24 @@ def find_column_flexible(row_dict: dict, possible_names: list) -> Any:
 async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
     """
     Loads all data from a given Excel file source in a single, safe transaction.
+    Loads three sheets: "Trainers Details", "Training Details", and "Employee Competency"
     """
-    logging.info(f"--- Starting Excel data load ---")
+    logging.info(f"--- Starting Excel data load (All 3 sheets: Trainers Details, Training Details, Employee Competency) ---")
     try:
         logging.info("Step 1: Clearing old data from tables...")
+        # Delete in order to respect foreign key constraints:
+        # 1. Delete tables that reference both training_details and other tables
+        await db.execute(text("DELETE FROM assignment_submissions"))
+        # 2. Delete tables that reference training_details
+        await db.execute(text("DELETE FROM shared_assignments"))
+        await db.execute(text("DELETE FROM shared_feedback"))
+        await db.execute(text("DELETE FROM training_requests"))
         await db.execute(text("DELETE FROM training_assignments"))
+        # 3. Now safe to delete training_details
         await db.execute(text("DELETE FROM training_details"))
+        # 4. Delete employee_competency (no dependencies on training_details)
+        await db.execute(text("DELETE FROM employee_competency"))
+        # 5. Finally delete trainers (no dependencies)
         await db.execute(text("DELETE FROM trainers"))
         logging.info("-> Old data cleared successfully.")
         
@@ -104,6 +116,24 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
                     logging.info(f"-> Training_details sequence ({seq_name}) reset to 1.")
                 else:
                     logging.warning("-> Could not find training_details sequence, will be set automatically on insert.")
+            
+            # Try to reset employee_competency sequence
+            try:
+                await db.execute(text("ALTER SEQUENCE employee_competency_id_seq RESTART WITH 1"))
+                logging.info("-> Employee_competency sequence reset to 1.")
+            except Exception:
+                # Try to find the actual sequence name
+                seq_result = await db.execute(text("""
+                    SELECT sequence_name FROM information_schema.sequences 
+                    WHERE sequence_name LIKE '%employee_competency%id%'
+                    ORDER BY sequence_name LIMIT 1
+                """))
+                seq_name = seq_result.scalar()
+                if seq_name:
+                    await db.execute(text(f"ALTER SEQUENCE {seq_name} RESTART WITH 1"))
+                    logging.info(f"-> Employee_competency sequence ({seq_name}) reset to 1.")
+                else:
+                    logging.warning("-> Could not find employee_competency sequence, will be set automatically on insert.")
             
             logging.info("-> ID sequences reset successfully. IDs will start from 1.")
         except Exception as seq_error:
@@ -171,9 +201,10 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
             missing_fields = []
             skill_val = find_column_flexible(row, ["skill"]) or row.get("skill")
             competency_val = find_column_flexible(row, ["competency", "competence"]) or row.get("competency")
-            # Try trainer-specific names first, then fallback to generic names
-            trainer_name_val = (find_column_flexible(row, ["trainer_name", "trainername", "trainer name", "trainer"]) or 
-                              find_column_flexible(row, ["copmetency", "name"])) or row.get("trainer_name")
+            # IMPORTANT: In Excel, trainer name is in "Copmetency" column (typo), check it first
+            # Then try other trainer name variations
+            trainer_name_val = (find_column_flexible(row, ["copmetency"]) or 
+                              find_column_flexible(row, ["trainer_name", "trainername", "trainer name", "trainer", "name"])) or row.get("trainer_name")
             expertise_level_val = find_column_flexible(row, ["expertise_level", "expertiselevel", "expertise level", "expertise", "level"]) or row.get("expertise_level")
             
             # Clean and validate values
@@ -249,6 +280,20 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
             for idx in range(min(3, len(df_trainings))):
                 row_dict = df_trainings.iloc[idx].to_dict()
                 logging.info(f"   Row {idx+2}: {row_dict}")
+            
+            # CRITICAL: Show exact column names that contain trainer/email
+            logging.info("=" * 80)
+            logging.info("🔍 COLUMN NAME ANALYSIS:")
+            sample_row = df_trainings.iloc[0].to_dict()
+            trainer_cols = [k for k in sample_row.keys() if 'trainer' in k.lower()]
+            email_cols = [k for k in sample_row.keys() if 'email' in k.lower() or 'mail' in k.lower()]
+            logging.info(f"   Columns with 'trainer': {trainer_cols}")
+            logging.info(f"   Columns with 'email': {email_cols}")
+            if trainer_cols:
+                logging.info(f"   Value in '{trainer_cols[0]}': {repr(sample_row.get(trainer_cols[0]))}")
+            if email_cols:
+                logging.info(f"   Value in '{email_cols[0]}': {repr(sample_row.get(email_cols[0]))}")
+            logging.info("=" * 80)
 
         trainings_to_add = []
         skipped_training_count = 0
@@ -256,19 +301,64 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
             # Validate required fields before creating TrainingDetail object
             # Use flexible column matching to handle typos and variations
             missing_fields = []
-            training_name_val = find_column_flexible(row, ["trainingname_program", "training_name", "trainingname", "training name", "program", "training"]) or row.get("trainingname_program")
-            trainer_name_val = find_column_flexible(row, ["trainer_name", "trainer", "trainername", "trainer name", "copmetency", "name"]) or row.get("trainer_name")
+            # Training Name/Program - try multiple variations
+            training_name_val = find_column_flexible(row, [
+                "trainingname_program", "training_name_program", "training_name", 
+                "trainingname", "training name", "program", "training"
+            ]) or row.get("trainingname_program")
+            
+            # Trainer Name - try direct access first, then flexible matching
+            # After clean_headers, column names become lowercase with underscores
+            trainer_name_val = None
+            # Try common variations directly
+            for col_name in ["trainer_name", "trainername", "trainer", "trainer name"]:
+                if col_name in row and row[col_name]:
+                    trainer_name_val = row[col_name]
+                    break
+            
+            # If not found, try flexible matching
+            if not trainer_name_val:
+                trainer_name_val = find_column_flexible(row, [
+                    "trainer_name", "trainer", "trainername", "trainer name", "name"
+                ])
+            
+            # Email - try direct access first, then flexible matching
+            email_val = None
+            # Try common variations directly
+            for col_name in ["email_id", "emailid", "email", "email_address", "email id"]:
+                if col_name in row and row[col_name]:
+                    email_val = row[col_name]
+                    break
+            
+            # If not found, try flexible matching
+            if not email_val:
+                email_val = find_column_flexible(row, [
+                    "email_id", "emailid", "email", "email_address", "email id"
+                ])
+            
+            # Debug: Log raw values for first few rows
+            if i < 3:
+                logging.info(f"🔍 DEBUG Row {i+2} - Raw values:")
+                logging.info(f"   training_name (raw): {repr(training_name_val)}")
+                logging.info(f"   trainer_name (raw): {repr(trainer_name_val)} (type: {type(trainer_name_val)})")
+                logging.info(f"   email (raw): {repr(email_val)} (type: {type(email_val)})")
+                logging.info(f"   All row keys: {list(row.keys())}")
             
             # Clean values first
             if training_name_val and isinstance(training_name_val, str):
                 training_name_val = training_name_val.strip()
+            elif training_name_val is not None:
+                training_name_val = str(training_name_val).strip()
+            
             if trainer_name_val and isinstance(trainer_name_val, str):
                 trainer_name_val = trainer_name_val.strip()
+            elif trainer_name_val is not None:
+                trainer_name_val = str(trainer_name_val).strip()
             
-            # Provide default for empty trainer_name (make it optional)
-            if not trainer_name_val:
-                trainer_name_val = "Not Assigned"
-                logging.info(f"Training row {i+2}: Using default 'Not Assigned' for empty trainer_name")
+            if email_val and isinstance(email_val, str):
+                email_val = email_val.strip()
+            elif email_val is not None:
+                email_val = str(email_val).strip()
             
             # Then validate only truly required fields
             if not training_name_val:
@@ -277,49 +367,265 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
             if missing_fields:
                 skipped_training_count += 1
                 logging.warning(f"Skipping training row {i+2} due to missing required fields ({', '.join(missing_fields)})")
-                logging.warning(f"  Row data: trainingname_program={repr(training_name_val)}, trainer_name={repr(trainer_name_val)}")
                 if i < 5:  # Show first 5 skipped rows in detail
                     logging.warning(f"  Full row keys: {list(row.keys())}")
                 continue
 
-            date_val = row.get("training_dates")
+            # Use flexible matching for all fields
+            date_val = find_column_flexible(row, ["training_dates", "training_date", "date", "dates"]) or row.get("training_dates")
             
-            # ### FIX: Convert date column to datetime objects, not strings ###
-            # pd.to_datetime handles various formats from Excel robustly.
-            # .date() extracts just the date part, which is common for DBs.
-            # If your DB column is DATETIME or TIMESTAMP, you can remove .date()
-            final_date = pd.to_datetime(date_val).date() if pd.notna(date_val) else None
+            # Convert date column to datetime objects, not strings
+            try:
+                final_date = pd.to_datetime(date_val).date() if pd.notna(date_val) and date_val else None
+            except Exception as date_error:
+                logging.warning(f"Row {i+2}: Could not parse date '{date_val}': {date_error}. Setting to None.")
+                final_date = None
 
-            trainings_to_add.append(
-                TrainingDetail(
-                    division=row.get("division"),
-                    department=row.get("department"),
-                    competency=row.get("competency"),
-                    skill=row.get("skill"),
-                    training_name=row.get("trainingname_program"),
-                    training_topics=row.get("trainingtopics__material"),
-                    prerequisites=row.get("perquisites"),
-                    skill_category=row.get("skill_category_(l1_-_l5)"),
-                    trainer_name=row.get("trainer_name"),
-                    email=row.get("email_id"),
-                    
-                    # Pass the corrected date object, not a string
-                    training_date=final_date,
-                    
-                    # Also corrected duration and seats to be strings (as per your model), but better if they are integers
-                    duration=str(row.get("duration_(in_hrs)")) if pd.notna(row.get("duration_(in_hrs)")) else None,
-                    seats=str(row.get("no._of_seats")) if pd.notna(row.get("no._of_seats)")) else None,
-                    
-                    time=row.get("time"),
-                    training_type=row.get("training_type"),
-                    assessment_details=row.get("assessment_details"),
+            # Use flexible matching for all other fields - calculate values first
+            duration_val = find_column_flexible(row, [
+                "duration_(in_hrs)", "duration_in_hrs", "duration", 
+                "duration_in_hours", "hours"
+            ]) or row.get("duration_(in_hrs)")
+            duration_str = str(duration_val) if pd.notna(duration_val) and duration_val else None
+            
+            seats_val = find_column_flexible(row, [
+                "no._of_seats", "no_of_seats", "seats", 
+                "number_of_seats", "numberofseats"
+            ]) or row.get("no._of_seats")
+            seats_str = str(seats_val) if pd.notna(seats_val) and seats_val else None
+            
+            # Get common fields that don't change per trainer
+            division_val = find_column_flexible(row, ["division"]) or row.get("division")
+            department_val = find_column_flexible(row, ["department"]) or row.get("department")
+            competency_val = find_column_flexible(row, ["competency", "competence"]) or row.get("competency")
+            skill_val = find_column_flexible(row, ["skill"]) or row.get("skill")
+            training_topics_val = find_column_flexible(row, [
+                "trainingtopics__material", "training_topics_material", 
+                "training_topics", "trainingtopics", "topics", "material"
+            ]) or row.get("trainingtopics__material")
+            prerequisites_val = find_column_flexible(row, [
+                "perquisites", "prerequisites", "prerequisite"
+            ]) or row.get("perquisites")
+            skill_category_val = find_column_flexible(row, [
+                "skill_category_(l1_-_l5)", "skill_category", 
+                "skillcategory", "category"
+            ]) or row.get("skill_category_(l1_-_l5)")
+            time_val = find_column_flexible(row, ["time", "training_time"]) or row.get("time")
+            training_type_val = find_column_flexible(row, [
+                "training_type", "trainingtype", "type"
+            ]) or row.get("training_type")
+            assessment_details_val = find_column_flexible(row, [
+                "assessment_details", "assessmentdetails", 
+                "assessment", "assessment_detail"
+            ]) or row.get("assessment_details")
+            
+            # Split trainers by comma - handle multiple trainers
+            # Convert to string first to handle any pandas/Excel types
+            trainer_str = str(trainer_name_val).strip() if trainer_name_val else ""
+            if trainer_str and trainer_str.lower() != "nan" and trainer_str.lower() != "none":
+                # Split by comma and clean each trainer name
+                trainer_names = [t.strip() for t in trainer_str.split(',') if t.strip() and t.strip().lower() != "nan"]
+            else:
+                trainer_names = ["Not Assigned"]
+            
+            # Split emails by comma, newline, or space and clean
+            email_list = []
+            email_str = ""  # Initialize to avoid scope issues
+            if email_val:
+                # Convert to string first to handle any pandas/Excel types
+                email_str = str(email_val).strip() if email_val else ""
+                if email_str and email_str.lower() != "nan" and email_str.lower() != "none":
+                    # Try splitting by comma first (most common in Excel), then newline, then space
+                    if ',' in email_str:
+                        email_list = [e.strip() for e in email_str.split(',') if e.strip() and '@' in e.strip() and e.strip().lower() != "nan"]
+                    elif '\n' in email_str:
+                        email_list = [e.strip() for e in email_str.split('\n') if e.strip() and '@' in e.strip() and e.strip().lower() != "nan"]
+                    else:
+                        # Split by space and filter for valid emails
+                        email_list = [e.strip() for e in email_str.split() if e.strip() and '@' in e.strip() and e.strip().lower() != "nan"]
+            else:
+                email_str = "None"
+            
+            # ALWAYS log splitting details for debugging (not just when multiple)
+            logging.info(f"🔍 Row {i+2} SPLITTING:")
+            logging.info(f"   Trainer string: {repr(trainer_str)}")
+            logging.info(f"   Split into {len(trainer_names)} trainer(s): {trainer_names}")
+            logging.info(f"   Email string: {repr(email_str)}")
+            logging.info(f"   Split into {len(email_list)} email(s): {email_list}")
+            
+            # Create one training record per trainer
+            for idx, trainer_name in enumerate(trainer_names):
+                # Match email with trainer index (1-to-1 matching)
+                if idx < len(email_list):
+                    trainer_email = email_list[idx]
+                elif len(email_list) == 1:
+                    # If only one email but multiple trainers, use the same email for all
+                    trainer_email = email_list[0]
+                else:
+                    trainer_email = None
+                
+                logging.info(f"Row {i+2}, Trainer {idx+1}/{len(trainer_names)}: '{trainer_name}' -> email: '{trainer_email}'")
+                
+                trainings_to_add.append(
+                    TrainingDetail(
+                        division=division_val,
+                        department=department_val,
+                        competency=competency_val,
+                        skill=skill_val,
+                        training_name=training_name_val,
+                        training_topics=training_topics_val,
+                        prerequisites=prerequisites_val,
+                        skill_category=skill_category_val,
+                        trainer_name=trainer_name,
+                        email=trainer_email,
+                        training_date=final_date,
+                        duration=duration_str,
+                        seats=seats_str,
+                        time=time_val,
+                        training_type=training_type_val,
+                        assessment_details=assessment_details_val,
+                    )
                 )
-            )
+            
+            if len(trainer_names) > 1:
+                logging.info(f"✅ Row {i+2}: Successfully split into {len(trainer_names)} separate training records")
         
         logging.info(f"-> Training validation complete: {len(trainings_to_add)} valid rows, {skipped_training_count} skipped.")
 
-        # --- 3. Add all objects to the session ---
-        logging.info(f"Step 4: Preparing to add {len(trainers_to_add)} trainers and {len(trainings_to_add)} trainings to the database session.")
+        # --- 3. Load Employee Competency ---
+        logging.info("Step 3.5: Reading 'Employee Competency' sheet from Excel...")
+        excel_file_source.seek(0)
+        competencies_to_add = []
+        skipped_competency_count = 0
+        
+        try:
+            df_competency_raw = pd.read_excel(excel_file_source, sheet_name="Employee Competency", engine='openpyxl')
+        except ValueError as e:
+            # List available sheets if the sheet name is wrong
+            excel_file_source.seek(0)
+            xl_file = pd.ExcelFile(excel_file_source, engine='openpyxl')
+            available_sheets = xl_file.sheet_names
+            logging.warning(f"Sheet 'Employee Competency' not found! Available sheets: {available_sheets}")
+            logging.warning("-> Continuing without Employee Competency data...")
+            df_competency_raw = None
+        
+        if df_competency_raw is not None:
+            logging.info(f"-> Original column names (before cleaning): {list(df_competency_raw.columns)}")
+            
+            df_competency = df_competency_raw.replace({np.nan: None})
+            df_competency = clean_headers(df_competency)
+            logging.info(f"-> Found {len(df_competency)} rows in 'Employee Competency'.")
+            logging.info(f"-> Column names after cleaning: {list(df_competency.columns)}")
+            
+            # Show first few rows
+            if len(df_competency) > 0:
+                logging.info("-> First 3 rows of data:")
+                for idx in range(min(3, len(df_competency))):
+                    logging.info(f"   Row {idx+2}: {df_competency.iloc[idx].to_dict()}")
+            
+            for i, row in df_competency.iterrows():
+                try:
+                    # Map Excel columns to database columns using flexible matching
+                    row_dict = row.to_dict()
+                    
+                    employee_empid = find_column_flexible(row_dict, ['employee_id', 'employeeid', 'empid', 'employee_empid'])
+                    if employee_empid:
+                        # Convert float to int then to string (handles Excel's 5504763.0 -> "5504763")
+                        if isinstance(employee_empid, float):
+                            employee_empid = str(int(employee_empid))
+                        else:
+                            employee_empid = str(employee_empid).strip()
+                    else:
+                        employee_empid = None
+                    
+                    employee_name = find_column_flexible(row_dict, ['employee_name', 'employeename', 'employee name', 'name'])
+                    if employee_name and isinstance(employee_name, str):
+                        employee_name = employee_name.strip()
+                    
+                    division = find_column_flexible(row_dict, ['division'])
+                    if division and isinstance(division, str):
+                        division = division.strip()
+                    
+                    department = find_column_flexible(row_dict, ['department'])
+                    if department and isinstance(department, str):
+                        department = department.strip()
+                    
+                    project = find_column_flexible(row_dict, ['project'])
+                    if project and isinstance(project, str):
+                        project = project.strip()
+                    
+                    role_specific_comp = find_column_flexible(row_dict, ['role_specific_competency_(mhs)', 'role_specific_competency', 'role_specific_comp', 'role specific competency (mhs)'])
+                    if role_specific_comp and isinstance(role_specific_comp, str):
+                        role_specific_comp = role_specific_comp.strip()
+                    
+                    destination = find_column_flexible(row_dict, ['designation', 'destination', 'desination'])
+                    if destination and isinstance(destination, str):
+                        destination = destination.strip()
+                    
+                    competency = find_column_flexible(row_dict, ['competency', 'competence'])
+                    if competency and isinstance(competency, str):
+                        competency = competency.strip()
+                    
+                    skill = find_column_flexible(row_dict, ['skill'])
+                    if skill and isinstance(skill, str):
+                        skill = skill.strip()
+                    
+                    current_expertise = find_column_flexible(row_dict, ['current_expertise_level', 'current_expertise', 'current expertise level', 'current expertise'])
+                    if current_expertise and isinstance(current_expertise, str):
+                        current_expertise = current_expertise.strip()
+                    
+                    target_expertise = find_column_flexible(row_dict, ['target_expertise_level', 'target_expertise', 'target expertise level', 'target expertise'])
+                    if target_expertise and isinstance(target_expertise, str):
+                        target_expertise = target_expertise.strip()
+                    
+                    comments = find_column_flexible(row_dict, ['comments', 'comment'])
+                    if comments and isinstance(comments, str):
+                        comments = comments.strip()
+                    
+                    # Handle target_date - convert from Excel date to Python date
+                    target_date = find_column_flexible(row_dict, ['target_date', 'target date'])
+                    try:
+                        final_target_date = pd.to_datetime(target_date).date() if pd.notna(target_date) and target_date else None
+                    except Exception:
+                        final_target_date = None
+                    
+                    # Validate required fields
+                    if not employee_empid:
+                        skipped_competency_count += 1
+                        logging.warning(f"Skipping Employee Competency row {i+2} due to missing employee_empid")
+                        continue
+                    
+                    # Create EmployeeCompetency object
+                    competencies_to_add.append(
+                        EmployeeCompetency(
+                            employee_empid=employee_empid,
+                            employee_name=employee_name,
+                            department=department,
+                            division=division,
+                            project=project,
+                            role_specific_comp=role_specific_comp,
+                            destination=destination,
+                            competency=competency,
+                            skill=skill,
+                            current_expertise=current_expertise,
+                            target_expertise=target_expertise,
+                            comments=comments,
+                            target_date=final_target_date
+                        )
+                    )
+                    
+                    if i < 3:  # Log first 3 successful rows
+                        logging.info(f"✅ Employee Competency row {i+2} added: employee={employee_empid} ({employee_name}), skill={skill}, competency={competency}")
+                        
+                except Exception as row_error:
+                    skipped_competency_count += 1
+                    logging.warning(f"Skipping Employee Competency row {i+2} due to error: {row_error}")
+                    continue
+            
+            logging.info(f"-> Employee Competency validation complete: {len(competencies_to_add)} valid rows, {skipped_competency_count} skipped.")
+
+        # --- 4. Add all objects to the session ---
+        logging.info(f"Step 4: Preparing to add {len(trainers_to_add)} trainers, {len(trainings_to_add)} trainings, and {len(competencies_to_add)} employee competencies to the database session.")
         if trainers_to_add:
             db.add_all(trainers_to_add)
             logging.info(f"✅ Added {len(trainers_to_add)} trainer records to session.")
@@ -332,30 +638,37 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
         else:
             logging.warning("⚠️ No training records to add - all rows were skipped!")
         
+        if competencies_to_add:
+            db.add_all(competencies_to_add)
+            logging.info(f"✅ Added {len(competencies_to_add)} employee competency records to session.")
+        else:
+            logging.warning("⚠️ No employee competency records to add - all rows were skipped or sheet not found!")
+        
         # Final summary
         logging.info("=" * 80)
         logging.info("📊 FINAL SUMMARY:")
         logging.info(f"   Trainers: {len(trainers_to_add)} valid rows, {skipped_count} skipped")
         logging.info(f"   Trainings: {len(trainings_to_add)} valid rows, {skipped_training_count} skipped")
-        logging.info(f"   Total rows to insert: {len(trainers_to_add) + len(trainings_to_add)}")
+        logging.info(f"   Employee Competencies: {len(competencies_to_add)} valid rows, {skipped_competency_count} skipped")
+        logging.info(f"   Total rows to insert: {len(trainers_to_add) + len(trainings_to_add) + len(competencies_to_add)}")
         logging.info("=" * 80)
         
-        if not trainers_to_add and not trainings_to_add:
+        if not trainers_to_add and not trainings_to_add and not competencies_to_add:
             logging.error("❌ CRITICAL: No data to insert! All rows were skipped.")
             logging.error("   Possible reasons:")
             logging.error("   1. Column names in Excel don't match expected names")
-            logging.error("   2. All rows have empty required fields (trainer_name, skill, competency, expertise_level)")
-            logging.error("   3. Sheet names are incorrect (should be 'Trainers Details' and 'Training Details')")
+            logging.error("   2. All rows have empty required fields")
+            logging.error("   3. Sheet names are incorrect (should be 'Trainers Details', 'Training Details', and 'Employee Competency')")
             logging.error("   Check the logs above for detailed information about skipped rows.")
             raise ValueError("No valid data found in Excel file. All rows were skipped during validation.")
 
         logging.info("-> Data added to session successfully.")
 
-        # --- 4. Commit the transaction ---
+        # --- 5. Commit the transaction ---
         logging.info("Step 5: Committing transaction to the database...")
         try:
             await db.commit()
-            logging.info(f"✅ COMMIT SUCCESSFUL! Database updated: {len(trainers_to_add)} trainers, {len(trainings_to_add)} trainings.")
+            logging.info(f"✅ COMMIT SUCCESSFUL! Database updated: {len(trainers_to_add)} trainers, {len(trainings_to_add)} trainings, {len(competencies_to_add)} employee competencies.")
             
             # Verify the data was actually inserted
             from sqlalchemy import select, func
@@ -363,10 +676,12 @@ async def load_all_from_excel(excel_file_source: Any, db: AsyncSession):
             trainers_count = trainers_count_result.scalar()
             trainings_count_result = await db.execute(select(func.count(TrainingDetail.id)))
             trainings_count = trainings_count_result.scalar()
+            competencies_count_result = await db.execute(select(func.count(EmployeeCompetency.id)))
+            competencies_count = competencies_count_result.scalar()
             
-            logging.info(f"✅ VERIFICATION: Database now contains {trainers_count} trainers and {trainings_count} trainings.")
+            logging.info(f"✅ VERIFICATION: Database now contains {trainers_count} trainers, {trainings_count} trainings, and {competencies_count} employee competencies.")
             
-            if trainers_count == 0 and trainings_count == 0:
+            if trainers_count == 0 and trainings_count == 0 and competencies_count == 0:
                 logging.error("⚠️ WARNING: Commit succeeded but no data found in database! Possible transaction rollback.")
             
             # Verify and fix IDs to start from 1 and be sequential

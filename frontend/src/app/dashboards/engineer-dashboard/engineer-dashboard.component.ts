@@ -175,6 +175,7 @@ export class EngineerDashboardComponent implements OnInit {
   skillStatusFilter: string = '';
   skillNameFilter: string = '';
   skillNames: string[] = [];
+  mySkillsView: 'core' | 'additional' = 'core'; // Toggle between core and additional skills
   userName: string = '';
   employeeId: string = '';
   employeeName: string = '';
@@ -243,6 +244,10 @@ export class EngineerDashboardComponent implements OnInit {
   assignedLevelFilter: string = 'All';
   assignedDateFilter: string = '';
   assignedTrainingsView: 'list' | 'calendar' = 'list';
+
+  // --- Training Requests Filters ---
+  requestStatusFilter: string = 'all';
+  requestSearch: string = '';
 
   // --- Calendar & Dashboard Metrics ---
   allTrainingsCalendarEvents: CalendarEvent[] = [];
@@ -420,10 +425,21 @@ export class EngineerDashboardComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    // Check authentication and fetch all data
+    const token = this.authService.getToken();
+    if (!token) {
+      console.warn('No token found on component init - redirecting to login');
+      this.router.navigate(['/login']);
+      return;
+    }
+    // Always fetch all data fresh on component initialization
+    // This ensures data consistency after logout/login cycles
     this.fetchDashboardData();
     this.fetchScheduledTrainings();
     this.fetchAssignedTrainings();
     this.fetchTrainingRequests();
+    // Load additional skills
+    this.loadAdditionalSkills();
   }
 
   // --- Calendar logic ---
@@ -576,13 +592,16 @@ export class EngineerDashboardComponent implements OnInit {
   fetchScheduledTrainings(): void {
     const token = this.authService.getToken();
     if (!token) {
-        return;
+      console.warn('No token available for fetching scheduled trainings');
+      // Don't clear data if token is missing - maintain consistency
+      return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-
+    console.log('Fetching scheduled trainings...');
     this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
       next: (response) => {
-        this.allTrainings = response;
+        console.log('Scheduled trainings response:', response);
+        this.allTrainings = response || [];
         // Clear cache when trainings are updated
         this._myTrainingsCache = [];
         this._myTrainingsCacheKey = '';
@@ -593,19 +612,39 @@ export class EngineerDashboardComponent implements OnInit {
                 title: t.training_name,
                 trainer: t.trainer_name || 'N/A'
             }));
+        console.log(`Loaded ${this.allTrainings.length} scheduled trainings`);
       },
       error: (err) => {
         console.error('Failed to fetch scheduled trainings:', err);
+        console.error('Error details:', {
+          status: err.status,
+          statusText: err.statusText,
+          error: err.error
+        });
+        // Don't clear existing data on error - maintain consistency
+        // Only clear if unauthorized
+        if (err.status === 401 || err.status === 403) {
+          console.warn('Authentication error in scheduled trainings - redirecting to login');
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        }
       }
     });
   }
 
   fetchAssignedTrainings(): void {
     const token = this.authService.getToken();
-    if (!token) return;
+    if (!token) {
+      console.warn('No token available for fetching assigned trainings');
+      // Don't clear data if token is missing - maintain consistency
+      // Only clear if explicitly unauthorized
+      return;
+    }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    console.log('Fetching assigned trainings...');
     this.http.get<TrainingDetail[]>('http://localhost:8000/assignments/my', { headers }).subscribe({
       next: (response) => {
+        console.log('Assigned trainings response:', response);
         this.assignedTrainings = (response || []).map(t => ({ ...t, assignmentType: 'personal' as const }));
         this.assignedTrainingsCalendarEvents = this.assignedTrainings
             .filter(t => t.training_date)
@@ -618,6 +657,26 @@ export class EngineerDashboardComponent implements OnInit {
         this.processDashboardTrainings();
         // Check submission status for all assigned trainings
         this.checkSubmissionStatuses();
+        console.log(`Loaded ${this.assignedTrainings.length} assigned trainings`);
+      },
+      error: (err) => {
+        console.error('Failed to fetch assigned trainings:', err);
+        console.error('Error details:', {
+          status: err.status,
+          statusText: err.statusText,
+          error: err.error
+        });
+        // If unauthorized, redirect to login (don't clear data - let component reinitialize on next login)
+        if (err.status === 401 || err.status === 403) {
+          console.warn('Authentication error - redirecting to login');
+          // Don't clear data arrays - they will be refreshed when user logs back in
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else {
+          // For other errors, don't clear data - maintain consistency
+          // Data will remain from previous successful fetch
+          console.warn('Non-auth error - keeping existing assigned trainings data');
+        }
       }
     });
   }
@@ -728,7 +787,8 @@ export class EngineerDashboardComponent implements OnInit {
   fetchTrainingRequests(): void {
     const token = this.authService.getToken();
     if (!token) {
-      console.log('No token available for fetching training requests');
+      console.warn('No token available for fetching training requests');
+      // Don't clear data if token is missing - maintain consistency
       return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -738,13 +798,22 @@ export class EngineerDashboardComponent implements OnInit {
       next: (response) => {
         console.log('Training requests response:', response);
         this.trainingRequests = response || [];
-        console.log('Training requests count:', this.trainingRequests.length);
-        console.log('Training requests array:', this.trainingRequests);
+        console.log(`Loaded ${this.trainingRequests.length} training requests`);
       },
       error: (err) => {
         console.error('Failed to fetch training requests:', err);
-        console.error('Error details:', err.error);
-        console.error('Error status:', err.status);
+        console.error('Error details:', {
+          status: err.status,
+          statusText: err.statusText,
+          error: err.error
+        });
+        // Don't clear existing data on error - maintain consistency
+        // Only clear if unauthorized
+        if (err.status === 401 || err.status === 403) {
+          console.warn('Authentication error in training requests - redirecting to login');
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        }
       }
     });
   }
@@ -785,15 +854,16 @@ export class EngineerDashboardComponent implements OnInit {
         const trainerName = String(t.trainer_name || '').trim();
         if (!trainerName) return false;
         
-        // Normalize all strings for comparison
-        const trainerNameLower = trainerName.toLowerCase();
-        const empIdLower = empId.toLowerCase();
-        const empNameLower = empName.toLowerCase();
+        // Normalize all strings for comparison (remove extra spaces, convert to lowercase)
+        const trainerNameLower = trainerName.toLowerCase().replace(/\s+/g, ' ').trim();
+        const empIdLower = empId.toLowerCase().trim();
+        const empNameLower = empName.toLowerCase().replace(/\s+/g, ' ').trim();
         
         // Primary match: employeeId (username) - exact match (case-insensitive)
         const matchesId = trainerNameLower === empIdLower;
         
         // Fallback match: employeeName (for trainings imported via Excel or other sources)
+        // Exact match
         const matchesName = empName && empNameLower.length > 0 && trainerNameLower === empNameLower;
         
         // Additional: Check if trainer_name contains the employeeId (for partial matches like "5503411 - John Doe")
@@ -802,10 +872,22 @@ export class EngineerDashboardComponent implements OnInit {
         // Additional: Check if trainer_name contains the employeeName (for partial matches)
         const containsName = empName && empNameLower.length > 0 && trainerNameLower.includes(empNameLower);
         
-        const matches = matchesId || matchesName || containsId || containsName;
+        // NEW: Check if trainer_name matches any part of employeeName (for cases like "Sharib Jawed" matching "Sharib" or "Jawed")
+        let matchesNameParts = false;
+        if (empName && empNameLower.length > 0) {
+          const nameParts = empNameLower.split(/\s+/).filter(part => part.length > 2); // Ignore very short parts
+          matchesNameParts = nameParts.some(part => trainerNameLower.includes(part));
+        }
+        
+        // NEW: Reverse check - check if employeeName contains trainer_name (for cases where trainer_name is shorter)
+        const reverseContainsName = empName && empNameLower.length > 0 && trainerNameLower.length > 0 && 
+                                     empNameLower.includes(trainerNameLower);
+        
+        const matches = matchesId || matchesName || containsId || containsName || matchesNameParts || reverseContainsName;
         
         if (matches) {
           console.log(`[Trainer Zone] ✓ Match: "${t.training_name}" (trainer_name: "${trainerName}" matches employeeId="${empId}" or employeeName="${empName}")`);
+          console.log(`[Trainer Zone]   Match details: matchesId=${matchesId}, matchesName=${matchesName}, containsId=${containsId}, containsName=${containsName}, matchesNameParts=${matchesNameParts}, reverseContainsName=${reverseContainsName}`);
         }
         
         return matches;
@@ -827,6 +909,12 @@ export class EngineerDashboardComponent implements OnInit {
     });
     
     return filtered;
+  }
+
+  // Getter to determine if user should see trainer zone tab
+  // Shows tab if: 1) isTrainer flag is true from API, OR 2) user has trainings where they are listed as trainer
+  get shouldShowTrainerZone(): boolean {
+    return this.isTrainer || this.myTrainings.length > 0;
   }
 
   isUpcoming(dateStr?: string): boolean {
@@ -1447,8 +1535,9 @@ export class EngineerDashboardComponent implements OnInit {
   }
 
   viewedAssignment: Assignment | null = null;
-  viewedFeedback: { defaultQuestions: FeedbackQuestion[], customQuestions: FeedbackQuestion[], trainingId?: number } | null = null;
+  viewedFeedback: { defaultQuestions: FeedbackQuestion[], customQuestions: FeedbackQuestion[], trainingId?: number, sharedFeedbackId?: number } | null = null;
   currentFeedbackTrainingId: number | null = null; // Store training ID separately for feedback submission
+  feedbackResponses: Map<number, string> = new Map(); // Store feedback responses: questionIndex -> selectedOption
   showAssignmentModal: boolean = false;
   showFeedbackModal: boolean = false;
   showExamModal: boolean = false;
@@ -1513,9 +1602,11 @@ export class EngineerDashboardComponent implements OnInit {
           this.viewedFeedback = {
             defaultQuestions: response.defaultQuestions || [],
             customQuestions: response.customQuestions || [],
-            trainingId: training.id
+            trainingId: training.id,
+            sharedFeedbackId: response.id
           };
           this.currentFeedbackTrainingId = training.id;
+          this.feedbackResponses.clear(); // Clear previous responses
           this.showFeedbackModal = true;
         } else {
           this.toastService.warning('No feedback form has been shared for this training yet.');
@@ -1543,17 +1634,77 @@ export class EngineerDashboardComponent implements OnInit {
     this.showFeedbackModal = false;
     this.viewedFeedback = null;
     this.currentFeedbackTrainingId = null;
+    this.feedbackResponses.clear();
+  }
+
+  onFeedbackOptionSelect(questionIndex: number, option: string, questionText: string): void {
+    this.feedbackResponses.set(questionIndex, option);
+  }
+
+  getFeedbackResponse(questionIndex: number): string | undefined {
+    return this.feedbackResponses.get(questionIndex);
   }
 
   submitEngineerFeedback(): void {
-    // Mark feedback as submitted
-    if (this.currentFeedbackTrainingId) {
-      this.feedbackSubmissionStatus.set(this.currentFeedbackTrainingId, true);
-      this.closeFeedbackModal();
-      this.toastService.success('Feedback submitted successfully!');
-    } else {
+    if (!this.currentFeedbackTrainingId || !this.viewedFeedback || !this.viewedFeedback.sharedFeedbackId) {
       this.toastService.error('Unable to submit feedback. Please try again.');
+      return;
     }
+
+    // Collect all responses
+    const allQuestions = [
+      ...(this.viewedFeedback.defaultQuestions || []).map((q, i) => ({ ...q, index: i, isDefault: true })),
+      ...(this.viewedFeedback.customQuestions || []).map((q, i) => ({ ...q, index: i + (this.viewedFeedback?.defaultQuestions?.length || 0), isDefault: false }))
+    ];
+
+    const responses = allQuestions
+      .map((question, questionIndex) => {
+        const selectedOption = this.feedbackResponses.get(questionIndex);
+        if (!selectedOption) {
+          return null; // Skip unanswered questions
+        }
+        return {
+          questionIndex: questionIndex,
+          questionText: question.text,
+          selectedOption: selectedOption
+        };
+      })
+      .filter(r => r !== null) as { questionIndex: number; questionText: string; selectedOption: string }[];
+
+    // Check if all questions are answered
+    if (responses.length < allQuestions.length) {
+      this.toastService.warning('Please answer all questions before submitting.');
+      return;
+    }
+
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication error. Please log in again.');
+      return;
+    }
+
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const payload = {
+      training_id: this.currentFeedbackTrainingId,
+      shared_feedback_id: this.viewedFeedback.sharedFeedbackId,
+      responses: responses
+    };
+
+    this.http.post('http://localhost:8000/shared-content/feedback/submit', payload, { headers }).subscribe({
+      next: (response: any) => {
+        this.feedbackSubmissionStatus.set(this.currentFeedbackTrainingId!, true);
+        this.closeFeedbackModal();
+        this.toastService.success('Feedback submitted successfully!');
+      },
+      error: (err) => {
+        console.error('Failed to submit feedback:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only submit feedback for trainings assigned to you.');
+        } else {
+          this.toastService.error(`Failed to submit feedback. Error: ${err.statusText || 'Unknown error'}`);
+        }
+      }
+    });
   }
 
   private initializeExam(response: any): void {
@@ -1837,6 +1988,28 @@ export class EngineerDashboardComponent implements OnInit {
     return filtered;
   }
 
+  getFilteredRequests(): TrainingRequest[] {
+    let filtered = this.trainingRequests;
+    
+    // Filter by status
+    if (this.requestStatusFilter && this.requestStatusFilter !== 'all') {
+      filtered = filtered.filter(request => request.status === this.requestStatusFilter);
+    }
+    
+    // Filter by search term
+    if (this.requestSearch.trim()) {
+      const searchTerm = this.requestSearch.trim().toLowerCase();
+      filtered = filtered.filter(request => 
+        request.training.training_name.toLowerCase().includes(searchTerm) ||
+        request.training.trainer_name.toLowerCase().includes(searchTerm) ||
+        (request.training.skill && request.training.skill.toLowerCase().includes(searchTerm)) ||
+        (request.training.skill_category && request.training.skill_category.toLowerCase().includes(searchTerm))
+      );
+    }
+    
+    return filtered;
+  }
+
   getSkillProgress(competency: Skill | ModalSkill): number {
     const extractLevel = (level: string): number => {
       if (!level) return 0;
@@ -1866,20 +2039,40 @@ export class EngineerDashboardComponent implements OnInit {
 
   selectTab(tabName: string): void {
     this.activeTab = tabName;
-    if (tabName === 'assignedTrainings') {
+    // Refresh data for each tab to maintain consistency after logout/login
+    if (tabName === 'dashboard') {
+      // Refresh dashboard data and all related data
+      this.fetchDashboardData();
       this.fetchAssignedTrainings();
+    }
+    if (tabName === 'mySkills') {
+      // Refresh skills data
+      this.fetchDashboardData();
+      this.loadAdditionalSkills();
+    }
+    if (tabName === 'trainingCatalog') {
+      // Refresh training catalog and requests
+      this.fetchScheduledTrainings();
+      this.fetchTrainingRequests();
+    }
+    if (tabName === 'assignedTrainings') {
+      // Refresh assigned trainings
+      this.fetchAssignedTrainings();
+    }
+    if (tabName === 'myRequests') {
+      // Refresh training requests
+      this.fetchTrainingRequests();
     }
     if (tabName === 'trainerZone') {
       // Refresh scheduled trainings when switching to Trainer Zone to show latest sessions
       this.fetchScheduledTrainings();
     }
-    // Refresh training requests when switching to training catalog to show latest status
-    if (tabName === 'trainingCatalog') {
-      this.fetchTrainingRequests();
-    }
   }
 
   logout(): void {
+    // Clear only authentication data (not component data)
+    // Component will be destroyed, and data will be fresh when user logs back in
+    // This ensures data consistency - user will see current data from backend on next login
     this.authService.logout();
     this.router.navigate(['/login']);
   }
@@ -1982,11 +2175,28 @@ export class EngineerDashboardComponent implements OnInit {
   // --- Additional Skills CRUD ---
   loadAdditionalSkills(): void {
     const token = this.authService.getToken();
-    if (!token) return;
+    if (!token) {
+      console.warn('No token available for fetching additional skills');
+      // Don't clear data if token is missing - maintain consistency
+      return;
+    }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     this.http.get<any[]>('http://localhost:8000/additional-skills/', { headers }).subscribe({
-      next: (skills) => { this.additionalSkills = skills; },
-      error: () => { this.additionalSkills = []; }
+      next: (skills) => { 
+        this.additionalSkills = skills || [];
+        console.log(`Loaded ${this.additionalSkills.length} additional skills`);
+      },
+      error: (err) => {
+        console.error('Failed to fetch additional skills:', err);
+        // Don't clear existing data on error - maintain consistency
+        // Only redirect if unauthorized (data will be refreshed on next login)
+        if (err.status === 401 || err.status === 403) {
+          console.warn('Authentication error in additional skills - redirecting to login');
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        }
+        // For other errors, keep existing data
+      }
     });
   }
 
