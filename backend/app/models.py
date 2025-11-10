@@ -159,3 +159,24 @@ class FeedbackSubmission(Base):
     shared_feedback = relationship("SharedFeedback")
     employee = relationship("User", foreign_keys=[employee_empid])
 
+class ManagerPerformanceFeedback(Base):
+    __tablename__ = 'manager_performance_feedback'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    employee_empid = Column(String, ForeignKey('users.username'), nullable=False)
+    manager_empid = Column(String, ForeignKey('users.username'), nullable=False)
+    # Performance factors (ratings 1-5)
+    knowledge_retention = Column(Integer, nullable=True)  # How well they retained the knowledge
+    practical_application = Column(Integer, nullable=True)  # Ability to apply concepts in practice
+    engagement_level = Column(Integer, nullable=True)  # Level of engagement during training
+    improvement_areas = Column(Text, nullable=True)  # Areas that need improvement
+    strengths = Column(Text, nullable=True)  # Key strengths demonstrated
+    overall_performance = Column(Integer, nullable=False)  # Overall performance rating (1-5)
+    additional_comments = Column(Text, nullable=True)  # Additional comments from manager
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    employee = relationship("User", foreign_keys=[employee_empid])
+    manager = relationship("User", foreign_keys=[manager_empid])
+

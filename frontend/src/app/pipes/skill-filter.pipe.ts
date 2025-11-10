@@ -1,5 +1,5 @@
 import { Pipe, PipeTransform } from '@angular/core';
-import { Skill } from '../dashboards/engineer-dashboard/engineer-dashboard.component';
+import { Skill } from '../models/skill.model';
 
 @Pipe({
   name: 'skillFilter'

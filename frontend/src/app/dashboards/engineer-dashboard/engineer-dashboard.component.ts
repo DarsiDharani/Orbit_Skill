@@ -2,121 +2,14 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { ApiService } from '../../services/api.service';
 import { map, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { trigger, style, animate, transition, query, stagger } from '@angular/animations';
 import { ToastService, ToastMessage } from '../../services/toast.service';
-
-
-export interface Skill {
-  id: number;
-  skill: string;
-  competency: string;
-  current_expertise: string;
-  target_expertise: string;
-  status: 'Met' | 'Gap' | 'Error';
-}
-
-export interface ModalSkill {
-  id: number;
-  skill: string;
-  competency: string;
-  current_expertise?: string;
-  target_expertise?: string;
-  status?: 'Met' | 'Gap' | 'Error';
-}
-
-export interface TrainingDetail {
-  id: number;
-  division?: string;
-  department?: string;
-  competency?: string;
-  skill?: string;
-  training_name: string;
-  training_topics?: string;
-  prerequisites?: string;
-  skill_category?: string;
-  trainer_name: string;
-  email?: string;
-  training_date?: string;
-  duration?: string;
-  time?: string;
-  training_type?: string;
-  seats?: string;
-  assessment_details?: string;
-  assignmentType?: 'personal' | 'team'; // Added to distinguish between personal and team assignments
-}
-
-export interface TrainingRequest {
-  id: number;
-  training_id: number;
-  employee_empid: string;
-  manager_empid: string;
-  request_date: string;
-  status: 'pending' | 'approved' | 'rejected';
-  manager_notes?: string;
-  response_date?: string;
-  training: TrainingDetail;
-}
-
-// --- NEW, MORE DETAILED INTERFACES FOR ASSIGNMENTS ---
-export interface QuestionOption {
-  text: string;
-  isCorrect: boolean;
-}
-
-export interface AssignmentQuestion {
-  text: string;
-  helperText: string; // Optional helper text like "Please select at most 2 options."
-  type: 'single-choice' | 'multiple-choice' | 'text-input';
-  options: QuestionOption[];
-}
-
-export interface Assignment {
-  trainingId: number | null;
-  title: string;
-  description: string;
-  questions: AssignmentQuestion[];
-  sharedAssignmentId?: number;
-}
-
-export interface UserAnswer {
-  questionIndex: number;
-  type: string;
-  selectedOptions: number[];
-  textAnswer?: string;
-}
-
-export interface QuestionResult {
-  questionIndex: number;
-  isCorrect: boolean;
-  correctAnswers: number[];
-  userAnswers: number[];
-  userTextAnswer?: string;
-}
-
-export interface AssignmentResult {
-  id: number;
-  training_id: number;
-  score: number;
-  total_questions: number;
-  correct_answers: number;
-  question_results: QuestionResult[];
-  submitted_at: string;
-}
-
-
-export interface FeedbackQuestion {
-    text: string;
-    options: string[];
-    isDefault: boolean;
-}
-
-export interface CalendarEvent {
-  date: Date;
-  title: string;
-  trainer: string;
-}
+import { Skill, ModalSkill } from '../../models/skill.model';
+import { TrainingDetail, TrainingRequest, CalendarEvent } from '../../models/training.model';
+import { Assignment, AssignmentQuestion, QuestionOption, UserAnswer, QuestionResult, AssignmentResult, FeedbackQuestion } from '../../models/assignment.model';
 
 type LevelBlock = { level: number; items: string[] };
 type Section = { title: string; subtitle?: string; levels: LevelBlock[] };
@@ -232,6 +125,10 @@ export class EngineerDashboardComponent implements OnInit {
   assignmentSubmissionStatus: Map<number, boolean> = new Map(); // Track which trainings have submitted assignments
   assignmentScores: Map<number, number> = new Map(); // Track scores for each training
   feedbackSubmissionStatus: Map<number, boolean> = new Map(); // Track which trainings have submitted feedback
+  
+  // Manager Performance Feedback
+  managerFeedback: any[] = [];
+  isLoadingFeedback: boolean = false;
   trainingSearch: string = '';
   trainingSkillFilter: string = 'All';
   trainingLevelFilter: string = 'All';
@@ -414,12 +311,13 @@ export class EngineerDashboardComponent implements OnInit {
     }
   ];
 
-  private readonly API_ENDPOINT = 'http://localhost:8000/data/engineer';
+  private readonly API_ENDPOINT = '/data/engineer';
 
   constructor(
     private http: HttpClient,
     private router: Router,
     private authService: AuthService,
+    private apiService: ApiService,
     private cdr: ChangeDetectorRef,
     private toastService: ToastService
   ) {}
@@ -440,6 +338,50 @@ export class EngineerDashboardComponent implements OnInit {
     this.fetchTrainingRequests();
     // Load additional skills
     this.loadAdditionalSkills();
+    // Load manager feedback
+    this.fetchManagerFeedback();
+  }
+
+  // Fetch manager performance feedback
+  fetchManagerFeedback(): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    this.isLoadingFeedback = true;
+    
+    this.http.get<any[]>(this.apiService.getUrl('/shared-content/employee/performance-feedback'), { headers }).subscribe({
+      next: (feedback) => {
+        this.managerFeedback = feedback;
+        this.isLoadingFeedback = false;
+      },
+      error: (err) => {
+        console.error('Failed to fetch manager feedback:', err);
+        this.managerFeedback = [];
+        this.isLoadingFeedback = false;
+      }
+    });
+  }
+
+  // Get rating label
+  getRatingLabel(rating: number | null | undefined): string {
+    if (!rating) return 'Not Rated';
+    const labels: { [key: number]: string } = {
+      1: 'Poor',
+      2: 'Below Average',
+      3: 'Average',
+      4: 'Good',
+      5: 'Excellent'
+    };
+    return `${rating} - ${labels[rating] || 'Unknown'}`;
+  }
+
+  // Get rating color class
+  getRatingColorClass(rating: number | null | undefined): string {
+    if (!rating) return 'bg-slate-100 text-slate-600';
+    if (rating >= 4) return 'bg-green-100 text-green-700';
+    if (rating >= 3) return 'bg-yellow-100 text-yellow-700';
+    return 'bg-red-100 text-red-700';
   }
 
   // --- Calendar logic ---
@@ -513,7 +455,7 @@ export class EngineerDashboardComponent implements OnInit {
 
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.get<any>(this.API_ENDPOINT, { headers }).pipe(
+    this.http.get<any>(this.apiService.getUrl(this.API_ENDPOINT), { headers }).pipe(
       map(response => {
         this.employeeId = response.username;
         this.employeeName = response.employee_name || 'Employee';
@@ -597,10 +539,8 @@ export class EngineerDashboardComponent implements OnInit {
       return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    console.log('Fetching scheduled trainings...');
-    this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
+    this.http.get<TrainingDetail[]>(this.apiService.getUrl('/trainings/'), { headers }).subscribe({
       next: (response) => {
-        console.log('Scheduled trainings response:', response);
         this.allTrainings = response || [];
         // Clear cache when trainings are updated
         this._myTrainingsCache = [];
@@ -612,7 +552,6 @@ export class EngineerDashboardComponent implements OnInit {
                 title: t.training_name,
                 trainer: t.trainer_name || 'N/A'
             }));
-        console.log(`Loaded ${this.allTrainings.length} scheduled trainings`);
       },
       error: (err) => {
         console.error('Failed to fetch scheduled trainings:', err);
@@ -641,10 +580,8 @@ export class EngineerDashboardComponent implements OnInit {
       return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    console.log('Fetching assigned trainings...');
-    this.http.get<TrainingDetail[]>('http://localhost:8000/assignments/my', { headers }).subscribe({
+    this.http.get<TrainingDetail[]>(this.apiService.getUrl('/assignments/my'), { headers }).subscribe({
       next: (response) => {
-        console.log('Assigned trainings response:', response);
         this.assignedTrainings = (response || []).map(t => ({ ...t, assignmentType: 'personal' as const }));
         this.assignedTrainingsCalendarEvents = this.assignedTrainings
             .filter(t => t.training_date)
@@ -657,7 +594,6 @@ export class EngineerDashboardComponent implements OnInit {
         this.processDashboardTrainings();
         // Check submission status for all assigned trainings
         this.checkSubmissionStatuses();
-        console.log(`Loaded ${this.assignedTrainings.length} assigned trainings`);
       },
       error: (err) => {
         console.error('Failed to fetch assigned trainings:', err);
@@ -688,7 +624,7 @@ export class EngineerDashboardComponent implements OnInit {
     
     // Check assignment submission status for each training
     this.assignedTrainings.forEach(training => {
-      this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+      this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}/result`), { headers }).subscribe({
         next: (result: any) => {
           if (result) {
             this.assignmentSubmissionStatus.set(training.id, true);
@@ -736,7 +672,7 @@ export class EngineerDashboardComponent implements OnInit {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
     // Check if assignment is shared (for trainers)
-    this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+    this.http.get(this.apiService.getUrl(`/shared-content/trainer/assignments/${trainingId}`), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.sharedAssignments.set(trainingId, true);
@@ -756,7 +692,7 @@ export class EngineerDashboardComponent implements OnInit {
     });
 
     // Check if feedback is shared (for trainers)
-    this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+    this.http.get(this.apiService.getUrl(`/shared-content/trainer/feedback/${trainingId}`), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.sharedFeedback.set(trainingId, true);
@@ -793,12 +729,9 @@ export class EngineerDashboardComponent implements OnInit {
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
-    console.log('Fetching training requests for engineer...');
-    this.http.get<TrainingRequest[]>('http://localhost:8000/training-requests/my', { headers }).subscribe({
+    this.http.get<TrainingRequest[]>(this.apiService.getUrl('/training-requests/my'), { headers }).subscribe({
       next: (response) => {
-        console.log('Training requests response:', response);
         this.trainingRequests = response || [];
-        console.log(`Loaded ${this.trainingRequests.length} training requests`);
       },
       error: (err) => {
         console.error('Failed to fetch training requests:', err);
@@ -833,20 +766,6 @@ export class EngineerDashboardComponent implements OnInit {
     const empId = String(this.employeeId).trim();
     const empName = (this.employeeName || '').trim();
     
-    // Debug: Log key info only once per cache miss
-    if (this.allTrainings.length > 0) {
-      const uniqueTrainers = [...new Set(this.allTrainings.map(t => String(t.trainer_name || '').trim()).filter(Boolean))];
-      console.log(`[Trainer Zone] Looking for: employeeId="${empId}", employeeName="${empName}"`);
-      console.log(`[Trainer Zone] Found ${this.allTrainings.length} total trainings`);
-      console.log(`[Trainer Zone] Unique trainer_name values in database:`, uniqueTrainers);
-      console.log(`[Trainer Zone] Sample trainings with trainer_name:`, this.allTrainings.slice(0, 5).map(t => ({
-        id: t.id,
-        training_name: t.training_name,
-        trainer_name: String(t.trainer_name || '').trim(),
-        trainer_name_raw: t.trainer_name,
-        trainer_name_type: typeof t.trainer_name
-      })));
-    }
     
     // Filter: Match against employeeId first (what backend stores), then employeeName as fallback
     const filtered = this.allTrainings
@@ -883,22 +802,13 @@ export class EngineerDashboardComponent implements OnInit {
         const reverseContainsName = empName && empNameLower.length > 0 && trainerNameLower.length > 0 && 
                                      empNameLower.includes(trainerNameLower);
         
-        const matches = matchesId || matchesName || containsId || containsName || matchesNameParts || reverseContainsName;
-        
-        if (matches) {
-          console.log(`[Trainer Zone] ✓ Match: "${t.training_name}" (trainer_name: "${trainerName}" matches employeeId="${empId}" or employeeName="${empName}")`);
-          console.log(`[Trainer Zone]   Match details: matchesId=${matchesId}, matchesName=${matchesName}, containsId=${containsId}, containsName=${containsName}, matchesNameParts=${matchesNameParts}, reverseContainsName=${reverseContainsName}`);
-        }
-        
-        return matches;
+        return matchesId || matchesName || containsId || containsName || matchesNameParts || reverseContainsName;
       })
       .sort((a, b) => {
         const dateA = a.training_date ? new Date(a.training_date).getTime() : 0;
         const dateB = b.training_date ? new Date(b.training_date).getTime() : 0;
         return dateB - dateA; // Sort descending
       });
-    
-    console.log(`[Trainer Zone] Result: ${filtered.length} trainings found for employeeId="${empId}"`);
     
     // Update cache
     this._myTrainingsCache = filtered;
@@ -955,11 +865,7 @@ export class EngineerDashboardComponent implements OnInit {
   // Method to get request status for a training
   getRequestStatus(trainingId: number): 'none' | 'pending' | 'approved' | 'rejected' {
     const request = this.trainingRequests.find(req => req.training_id === trainingId);
-    const status = request ? request.status : 'none';
-    if (request) {
-      console.log(`Training ${trainingId} (${request.training?.training_name}) status: ${status}`);
-    }
-    return status;
+    return request ? request.status : 'none';
   }
 
   // Method to get request details for a training
@@ -1049,9 +955,9 @@ export class EngineerDashboardComponent implements OnInit {
       assessment_details: this.newTraining.assessment_details || null
     };
 
-    this.http.post('http://localhost:8000/trainings/', payload, { headers }).subscribe({
+    this.http.post(this.apiService.getUrl('/trainings/'), payload, { headers }).subscribe({
       next: () => {
-        alert('Training scheduled successfully!');
+        this.toastService.success('Training scheduled successfully!');
         this.closeScheduleTrainingModal();
         this.fetchScheduledTrainings();
       },
@@ -1059,9 +965,9 @@ export class EngineerDashboardComponent implements OnInit {
         console.error('Failed to schedule training:', err);
         if (err.status === 422 && err.error && err.error.detail) {
           const errorDetails = err.error.detail.map((e: any) => `- Field '${e.loc[1]}': ${e.msg}`).join('\n');
-          alert(`Please correct the following errors:\n${errorDetails}`);
+          this.toastService.error(`Please correct the following errors:\n${errorDetails}`);
         } else {
-          alert(`Failed to schedule training. Error: ${err.statusText || 'Unknown error'}`);
+          this.toastService.error(`Failed to schedule training. Error: ${err.statusText || 'Unknown error'}`);
         }
       }
     });
@@ -1084,7 +990,7 @@ export class EngineerDashboardComponent implements OnInit {
     const token = this.authService.getToken();
     if (token) {
       const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-      this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+      this.http.get(this.apiService.getUrl(`/shared-content/trainer/assignments/${trainingId}`), { headers }).subscribe({
         next: (response: any) => {
           if (response) {
             // Assignment already exists - load it for editing
@@ -1130,7 +1036,7 @@ export class EngineerDashboardComponent implements OnInit {
     const token = this.authService.getToken();
     if (token) {
       const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-      this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+      this.http.get(this.apiService.getUrl(`/shared-content/trainer/feedback/${trainingId}`), { headers }).subscribe({
         next: (response: any) => {
           if (response) {
             // Feedback already exists - load it for editing
@@ -1180,37 +1086,27 @@ export class EngineerDashboardComponent implements OnInit {
   }
 
   submitAssignment(): void {
-    console.log('submitAssignment called', this.newAssignment);
-    
     if (!this.newAssignment.trainingId || !this.newAssignment.title.trim() || this.newAssignment.questions.length === 0) {
       const errorMsg = 'Please select a training, provide a title, and add at least one question.';
-      console.warn('Validation failed:', { 
-        trainingId: this.newAssignment.trainingId, 
-        title: this.newAssignment.title, 
-        questionsCount: this.newAssignment.questions.length 
-      });
-      alert(errorMsg);
+      this.toastService.error(errorMsg);
       return;
     }
 
     for (const q of this.newAssignment.questions) {
       if (!q.text.trim()) {
         const errorMsg = 'Please ensure all questions have text.';
-        console.warn('Validation failed: question without text', q);
-        alert(errorMsg);
+        this.toastService.error(errorMsg);
         return;
       }
       if (q.type === 'single-choice' || q.type === 'multiple-choice') {
         if (q.options.some(opt => !opt.text.trim())) {
           const errorMsg = 'Please ensure all options have text.';
-          console.warn('Validation failed: option without text', q);
-          alert(errorMsg);
+          this.toastService.error(errorMsg);
           return;
         }
         if (!q.options.some(opt => opt.isCorrect)) {
           const errorMsg = `Please mark at least one correct answer for the question: "${q.text}"`;
-          console.warn('Validation failed: no correct answer marked', q);
-          alert(errorMsg);
+          this.toastService.error(errorMsg);
           return;
         }
       }
@@ -1231,11 +1127,8 @@ export class EngineerDashboardComponent implements OnInit {
       questions: this.newAssignment.questions
     };
 
-    console.log('Submitting assignment payload:', payload);
-    
-    this.http.post('http://localhost:8000/shared-content/assignments', payload, { headers }).subscribe({
+    this.http.post(this.apiService.getUrl('/shared-content/assignments'), payload, { headers }).subscribe({
       next: (response: any) => {
-        console.log('Assignment shared successfully:', response);
         // Mark assignment as shared for this training
         if (this.newAssignment.trainingId) {
           this.sharedAssignments.set(this.newAssignment.trainingId, true);
@@ -1340,7 +1233,7 @@ export class EngineerDashboardComponent implements OnInit {
 
   submitFeedback(): void {
     if (!this.newFeedback.trainingId) {
-      alert('Please select a training for the feedback form.');
+      this.toastService.error('Please select a training for the feedback form.');
       return;
     }
     const finalCustomQuestions = this.newFeedback.customQuestions
@@ -1368,7 +1261,7 @@ export class EngineerDashboardComponent implements OnInit {
       customQuestions: finalCustomQuestions
     };
 
-    this.http.post('http://localhost:8000/shared-content/feedback', payload, { headers }).subscribe({
+    this.http.post(this.apiService.getUrl('/shared-content/feedback'), payload, { headers }).subscribe({
       next: (response: any) => {
         // Mark feedback as shared for this training
         if (this.newFeedback.trainingId) {
@@ -1439,7 +1332,6 @@ export class EngineerDashboardComponent implements OnInit {
         skill: section.title,
         competency: section.subtitle || 'Core Competency'
       }));
-      console.log('Core Skills data:', this.modalSkills);
     } else if (filterStatus === 'Met') {
       this.modalTitle = 'Skills Met';
       // For Skills Met, we show the API skills with status "Met"
@@ -1451,10 +1343,7 @@ export class EngineerDashboardComponent implements OnInit {
         target_expertise: skill.target_expertise,
         status: skill.status
       }));
-      console.log('Skills Met data:', this.modalSkills);
     }
-    
-    console.log('Opening modal:', { filterStatus, modalTitle: this.modalTitle, modalSkillsCount: this.modalSkills.length });
     
     // Force change detection and then show modal
     this.cdr.detectChanges();
@@ -1466,7 +1355,6 @@ export class EngineerDashboardComponent implements OnInit {
     // Reset modal data
     this.modalTitle = '';
     this.modalSkills = [];
-    console.log('Modal closed and reset');
   }
 
   // --- Filter Reset Logic ---
@@ -1516,7 +1404,7 @@ export class EngineerDashboardComponent implements OnInit {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     const requestData = { training_id: training.id };
 
-    this.http.post<TrainingRequest>('http://localhost:8000/training-requests/', requestData, { headers }).subscribe({
+    this.http.post<TrainingRequest>(this.apiService.getUrl('/training-requests/'), requestData, { headers }).subscribe({
       next: (response) => {
         this.toastService.success(`Training request submitted successfully! Your manager will review your request for "${training.training_name}".`);
         this.fetchTrainingRequests(); // Refresh the requests list
@@ -1555,7 +1443,7 @@ export class EngineerDashboardComponent implements OnInit {
     }
 
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+    this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}`), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.viewedAssignment = {
@@ -1596,7 +1484,7 @@ export class EngineerDashboardComponent implements OnInit {
     }
 
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get(`http://localhost:8000/shared-content/feedback/${training.id}`, { headers }).subscribe({
+    this.http.get(this.apiService.getUrl(`/shared-content/feedback/${training.id}`), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.viewedFeedback = {
@@ -1645,16 +1533,24 @@ export class EngineerDashboardComponent implements OnInit {
     return this.feedbackResponses.get(questionIndex);
   }
 
+  getDefaultQuestionsLength(): number {
+    return this.viewedFeedback?.defaultQuestions?.length || 0;
+  }
+
   submitEngineerFeedback(): void {
     if (!this.currentFeedbackTrainingId || !this.viewedFeedback || !this.viewedFeedback.sharedFeedbackId) {
       this.toastService.error('Unable to submit feedback. Please try again.');
       return;
     }
 
+    // Store reference to avoid repeated null checks
+    const feedback = this.viewedFeedback;
+    const defaultQuestionsLength = feedback.defaultQuestions?.length || 0;
+
     // Collect all responses
     const allQuestions = [
-      ...(this.viewedFeedback.defaultQuestions || []).map((q, i) => ({ ...q, index: i, isDefault: true })),
-      ...(this.viewedFeedback.customQuestions || []).map((q, i) => ({ ...q, index: i + (this.viewedFeedback?.defaultQuestions?.length || 0), isDefault: false }))
+      ...(feedback.defaultQuestions || []).map((q, i) => ({ ...q, index: i, isDefault: true })),
+      ...(feedback.customQuestions || []).map((q, i) => ({ ...q, index: i + defaultQuestionsLength, isDefault: false }))
     ];
 
     const responses = allQuestions
@@ -1690,7 +1586,7 @@ export class EngineerDashboardComponent implements OnInit {
       responses: responses
     };
 
-    this.http.post('http://localhost:8000/shared-content/feedback/submit', payload, { headers }).subscribe({
+    this.http.post(this.apiService.getUrl('/shared-content/feedback/submit'), payload, { headers }).subscribe({
       next: (response: any) => {
         this.feedbackSubmissionStatus.set(this.currentFeedbackTrainingId!, true);
         this.closeFeedbackModal();
@@ -1739,11 +1635,11 @@ export class EngineerDashboardComponent implements OnInit {
     }
 
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+    this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}`), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           // Double-check submission status from backend
-          this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+          this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}/result`), { headers }).subscribe({
             next: (result: any) => {
               if (result) {
                 this.assignmentSubmissionStatus.set(training.id, true);
@@ -1852,7 +1748,7 @@ export class EngineerDashboardComponent implements OnInit {
       answers: this.userAnswers
     };
 
-    this.http.post('http://localhost:8000/shared-content/assignments/submit', payload, { headers }).subscribe({
+    this.http.post(this.apiService.getUrl('/shared-content/assignments/submit'), payload, { headers }).subscribe({
       next: (response: any) => {
         this.isSubmittingAssignment = false;
         this.assignmentResult = {
@@ -1893,11 +1789,11 @@ export class EngineerDashboardComponent implements OnInit {
     }
 
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}/result`, { headers }).subscribe({
+    this.http.get(this.apiService.sharedAssignmentResultUrl(training.id), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           // Also fetch assignment to show questions
-          this.http.get(`http://localhost:8000/shared-content/assignments/${training.id}`, { headers }).subscribe({
+          this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}`), { headers }).subscribe({
             next: (assignmentResponse: any) => {
               if (assignmentResponse) {
                 this.currentExamAssignment = {
@@ -2181,10 +2077,9 @@ export class EngineerDashboardComponent implements OnInit {
       return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get<any[]>('http://localhost:8000/additional-skills/', { headers }).subscribe({
+    this.http.get<any[]>(this.apiService.getUrl('/additional-skills/'), { headers }).subscribe({
       next: (skills) => { 
         this.additionalSkills = skills || [];
-        console.log(`Loaded ${this.additionalSkills.length} additional skills`);
       },
       error: (err) => {
         console.error('Failed to fetch additional skills:', err);
@@ -2218,8 +2113,8 @@ export class EngineerDashboardComponent implements OnInit {
     };
 
     const request = this.editingSkillId
-      ? this.http.put<any>(`http://localhost:8000/additional-skills/${this.editingSkillId}`, skillData, { headers })
-      : this.http.post<any>('http://localhost:8000/additional-skills/', skillData, { headers });
+      ? this.http.put<any>(this.apiService.getUrl(`/additional-skills/${this.editingSkillId}`), skillData, { headers })
+      : this.http.post<any>(this.apiService.getUrl('/additional-skills/'), skillData, { headers });
 
     request.subscribe({
       next: (savedSkill) => {
@@ -2239,7 +2134,7 @@ export class EngineerDashboardComponent implements OnInit {
     const token = this.authService.getToken();
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.delete(`http://localhost:8000/additional-skills/${skillId}`, { headers }).subscribe({
+    this.http.delete(this.apiService.getUrl(`/additional-skills/${skillId}`), { headers }).subscribe({
       next: () => { this.additionalSkills = this.additionalSkills.filter(skill => skill.id !== skillId); }
     });
   }

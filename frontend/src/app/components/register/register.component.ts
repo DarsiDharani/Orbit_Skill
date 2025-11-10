@@ -4,6 +4,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-register',
@@ -23,7 +24,8 @@ export class RegisterComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private router: Router,
-    private http: HttpClient
+    private http: HttpClient,
+    private apiService: ApiService
   ) {}
 
   ngOnInit(): void {
@@ -75,7 +77,7 @@ export class RegisterComponent implements OnInit {
       password: this.registerForm.get('password')?.value,
     };
 
-    this.http.post<any>('http://localhost:8000/register', registerData).subscribe({
+    this.http.post<any>(this.apiService.registerUrl, registerData).subscribe({
       next: () => {
         this.showSuccessPopup('Registration Successful!', 'Your account has been created successfully. Please login to continue.');
         setTimeout(() => {

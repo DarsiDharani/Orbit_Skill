@@ -388,6 +388,82 @@
                                 <div class="text-center py-8 text-slate-500 text-sm">You have no upcoming trainings.</div>
                             </ng-template>
                         </div>
+                        <!-- Manager Performance Feedback Section -->
+                        <div @slideFadeIn class="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200/60 p-2">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <i class="fa-solid fa-comment-dots text-indigo-600"></i>
+                                    <b>Manager Feedback</b>
+                                </h3>
+                                <button (click)="fetchManagerFeedback()" 
+                                        class="w-6 h-6 bg-indigo-100 hover:bg-indigo-200 rounded-full flex items-center justify-center transition-colors"
+                                        title="Refresh feedback">
+                                    <i class="fa-solid fa-rotate-right text-indigo-600 text-xs"></i>
+                                </button>
+                            </div>
+                            <div *ngIf="isLoadingFeedback" class="text-center py-4">
+                                <i class="fa-solid fa-spinner fa-spin text-indigo-600 text-lg mb-2"></i>
+                                <p class="text-xs text-slate-500">Loading feedback...</p>
+                            </div>
+                            <div *ngIf="!isLoadingFeedback && managerFeedback.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                <div *ngFor="let feedback of managerFeedback" 
+                                     class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-2.5 border border-indigo-200 hover:shadow-md transition-all">
+                                    <div class="flex items-start justify-between gap-2 mb-1.5">
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="font-bold text-slate-900 text-xs truncate">{{ feedback.training_name }}</h4>
+                                            <p class="text-[10px] text-slate-600 mt-0.5">
+                                                <i class="fa-solid fa-user-tie mr-1"></i>
+                                                {{ feedback.manager_name }}
+                                                <span class="mx-1">•</span>
+                                                <i class="fa-solid fa-clock mr-1"></i>
+                                                {{ feedback.updated_at | date:'short' }}
+                                            </p>
+                                        </div>
+                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full flex-shrink-0" [ngClass]="getRatingColorClass(feedback.overall_performance)">
+                                            {{ feedback.overall_performance }}/5
+                                        </span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1.5 mb-2">
+                                        <div *ngIf="feedback.knowledge_retention" class="bg-white/70 rounded px-1.5 py-1 text-center">
+                                            <p class="text-[9px] text-slate-600 font-medium">Knowledge</p>
+                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
+                                        </div>
+                                        <div *ngIf="feedback.practical_application" class="bg-white/70 rounded px-1.5 py-1 text-center">
+                                            <p class="text-[9px] text-slate-600 font-medium">Application</p>
+                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
+                                        </div>
+                                        <div *ngIf="feedback.engagement_level" class="bg-white/70 rounded px-1.5 py-1 text-center">
+                                            <p class="text-[9px] text-slate-600 font-medium">Engagement</p>
+                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
+                                        </div>
+                                    </div>
+                                    <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-1">
+                                        <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-2 py-1">
+                                            <p class="text-[9px] font-semibold text-green-800 mb-0.5">
+                                                <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
+                                            </p>
+                                            <p class="text-[10px] text-green-700 line-clamp-2">{{ feedback.strengths }}</p>
+                                        </div>
+                                        <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-2 py-1">
+                                            <p class="text-[9px] font-semibold text-amber-800 mb-0.5">
+                                                <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
+                                            </p>
+                                            <p class="text-[10px] text-amber-700 line-clamp-2">{{ feedback.improvement_areas }}</p>
+                                        </div>
+                                        <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-2 py-1">
+                                            <p class="text-[9px] font-semibold text-blue-800 mb-0.5">
+                                                <i class="fa-solid fa-comment mr-1"></i>Comments
+                                            </p>
+                                            <p class="text-[10px] text-blue-700 line-clamp-2">{{ feedback.additional_comments }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div *ngIf="!isLoadingFeedback && managerFeedback.length === 0" class="text-center py-6 text-slate-500">
+                                <i class="fa-solid fa-comment-slash text-2xl mb-2 text-slate-400"></i>
+                                <p class="text-xs">No feedback received yet</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1707,10 +1783,10 @@
                         <p class="font-medium text-slate-900 mb-3">{{ question.text }}</p>
                         <div class="space-y-2">
                             <label *ngFor="let option of question.options" class="flex items-center p-2 bg-white rounded border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                                   [ngClass]="{'bg-amber-100 border-amber-300': getFeedbackResponse(i + (viewedFeedback?.defaultQuestions?.length || 0)) === option}">
+                                   [ngClass]="{'bg-amber-100 border-amber-300': getFeedbackResponse(i + getDefaultQuestionsLength()) === option}">
                                 <input type="radio" [name]="'custom-' + i" class="mr-3" [value]="option"
-                                       [checked]="getFeedbackResponse(i + (viewedFeedback?.defaultQuestions?.length || 0)) === option"
-                                       (change)="onFeedbackOptionSelect(i + (viewedFeedback?.defaultQuestions?.length || 0), option, question.text)">
+                                       [checked]="getFeedbackResponse(i + getDefaultQuestionsLength()) === option"
+                                       (change)="onFeedbackOptionSelect(i + getDefaultQuestionsLength(), option, question.text)">
                                 <span class="text-slate-700">{{ option }}</span>
                             </label>
                         </div>

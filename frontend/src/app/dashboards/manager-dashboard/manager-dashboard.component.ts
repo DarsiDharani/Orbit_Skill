@@ -2,10 +2,13 @@ import { Component, OnInit, ElementRef, QueryList, AfterViewInit, ViewChildren }
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { ApiService } from '../../services/api.service';
 import { trigger, style, animate, transition, query, stagger } from '@angular/animations';
 import { ToastService, ToastMessage } from '../../services/toast.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { TrainingDetail, TrainingRequest, CalendarEvent } from '../../models/training.model';
+import { Assignment, AssignmentQuestion, QuestionOption, FeedbackQuestion } from '../../models/assignment.model';
 
 interface Competency {
   skill: string;
@@ -40,43 +43,7 @@ interface ManagerData {
   manager_is_trainer: boolean;
 }
 
-interface TrainingDetail {
-    id: number;
-    division?: string;
-    department?: string;
-    competency?: string;
-    skill?: string;
-    training_name: string;
-    training_topics?: string;
-    prerequisites?: string;
-    skill_category?: string;
-    trainer_name: string;
-    email?: string;
-    training_date?: string;
-    duration?: string;
-    time?: string;
-    training_type?: string;
-    seats?: string;
-    assessment_details?: string;
-    assignmentType?: 'personal' | 'team'; // Added to distinguish between personal and team assignments
-    assigned_to?: string; // Added for team assigned trainings
-}
-
-interface TrainingRequest {
-    id: number;
-    training_id: number;
-    employee_empid: string;
-    manager_empid: string;
-    request_date: string;
-    status: 'pending' | 'approved' | 'rejected';
-    manager_notes?: string;
-    response_date?: string;
-    training: TrainingDetail;
-    employee: {
-        username: string;
-        name?: string;
-    };
-}
+// TrainingDetail and TrainingRequest are now imported from models/training.model.ts
 
 interface TeamAssignmentSubmission {
     id: number;
@@ -88,6 +55,8 @@ interface TeamAssignmentSubmission {
     total_questions: number;
     correct_answers: number;
     submitted_at: string;
+    has_feedback?: boolean;
+    feedback_count?: number;
 }
 
 interface TeamFeedbackSubmission {
@@ -100,37 +69,27 @@ interface TeamFeedbackSubmission {
     submitted_at: string;
 }
 
-interface CalendarEvent {
-  date: Date;
-  title: string;
-  trainer: string;
+interface ManagerPerformanceFeedback {
+    id: number;
+    training_id: number;
+    training_name: string;
+    employee_empid: string;
+    employee_name: string;
+    manager_empid: string;
+    manager_name: string;
+    knowledge_retention?: number;
+    practical_application?: number;
+    engagement_level?: number;
+    improvement_areas?: string;
+    strengths?: string;
+    overall_performance: number;
+    additional_comments?: string;
+    created_at: string;
+    updated_at: string;
 }
 
-// --- NEW, MORE DETAILED INTERFACES FOR ASSIGNMENTS ---
-export interface QuestionOption {
-  text: string;
-  isCorrect: boolean;
-}
-
-export interface AssignmentQuestion {
-  text: string;
-  helperText: string; // Optional helper text like "Please select at most 2 options."
-  type: 'single-choice' | 'multiple-choice' | 'text-input';
-  options: QuestionOption[];
-}
-
-export interface Assignment {
-  trainingId: number | null;
-  title: string;
-  description: string;
-  questions: AssignmentQuestion[];
-}
-
-export interface FeedbackQuestion {
-    text: string;
-    options: string[];
-    isDefault: boolean;
-}
+// CalendarEvent, Assignment, AssignmentQuestion, QuestionOption, and FeedbackQuestion 
+// are now imported from models
 
 type LevelBlock = { level: number; items: string[] };
 type Section = { title: string; subtitle?: string; levels: LevelBlock[] };
@@ -353,7 +312,24 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   teamFeedbackSubmissions: TeamFeedbackSubmission[] = [];
   isLoadingSubmissions: boolean = false;
 
-  private readonly API_ENDPOINT = 'http://localhost:8000/data/manager/dashboard';
+  // Performance feedback
+  showFeedbackModal: boolean = false;
+  selectedSubmissionForFeedback: { type: 'assignment' | 'feedback'; submission: TeamAssignmentSubmission | TeamFeedbackSubmission } | null = null;
+  performanceFeedback = {
+    training_id: 0,
+    employee_empid: '',
+    knowledge_retention: null as number | null,
+    practical_application: null as number | null,
+    engagement_level: null as number | null,
+    improvement_areas: '',
+    strengths: '',
+    overall_performance: 3,
+    additional_comments: ''
+  };
+  isSubmittingFeedback: boolean = false;
+  existingFeedback: ManagerPerformanceFeedback | null = null;
+
+  private readonly API_ENDPOINT = '/data/manager/dashboard';
 
   levelsSearch = '';
   selectedSkill = '';
@@ -474,7 +450,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     private http: HttpClient,
     private router: Router,
     private authService: AuthService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private apiService: ApiService
   ) {}
 
   ngOnInit(): void {
@@ -680,7 +657,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
-    this.http.get<{training_id: number; employee_empid: string}[]>('http://localhost:8000/assignments/manager/team', { headers }).subscribe({
+    this.http.get<{training_id: number; employee_empid: string}[]>(this.apiService.managerTeamAssignmentsUrl, { headers }).subscribe({
       next: (response) => {
         console.log('Team assigned trainings loaded:', response);
         // Store existing assignments in a Set for quick duplicate checking
@@ -710,10 +687,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     
     // Fetch both assignment and feedback submissions
     forkJoin({
-      assignments: this.http.get<TeamAssignmentSubmission[]>('http://localhost:8000/shared-content/manager/team/assignments', { headers }).pipe(
+      assignments: this.http.get<TeamAssignmentSubmission[]>(this.apiService.managerTeamAssignmentsSubmissionsUrl, { headers }).pipe(
         catchError(() => of([]))
       ),
-      feedback: this.http.get<TeamFeedbackSubmission[]>('http://localhost:8000/shared-content/manager/team/feedback', { headers }).pipe(
+      feedback: this.http.get<TeamFeedbackSubmission[]>(this.apiService.managerTeamFeedbackSubmissionsUrl, { headers }).pipe(
         catchError(() => of([]))
       )
     }).subscribe({
@@ -727,6 +704,139 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         this.teamAssignmentSubmissions = [];
         this.teamFeedbackSubmissions = [];
         this.isLoadingSubmissions = false;
+      }
+    });
+  }
+
+  // Open feedback modal for a submission
+  openFeedbackModal(submission: TeamAssignmentSubmission | TeamFeedbackSubmission, type: 'assignment' | 'feedback'): void {
+    this.selectedSubmissionForFeedback = { type, submission };
+    this.performanceFeedback = {
+      training_id: submission.training_id,
+      employee_empid: submission.employee_empid,
+      knowledge_retention: null,
+      practical_application: null,
+      engagement_level: null,
+      improvement_areas: '',
+      strengths: '',
+      overall_performance: 3,
+      additional_comments: ''
+    };
+    this.existingFeedback = null;
+    this.showFeedbackModal = true;
+    
+    // Load existing feedback if any
+    this.loadExistingFeedback(submission.training_id, submission.employee_empid);
+  }
+
+  // Load existing feedback
+  loadExistingFeedback(trainingId: number, employeeEmpid: string): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    this.http.get<ManagerPerformanceFeedback>(this.apiService.managerPerformanceFeedbackByIdUrl(trainingId, employeeEmpid), { headers }).subscribe({
+      next: (feedback) => {
+        if (feedback) {
+          this.existingFeedback = feedback;
+          this.performanceFeedback = {
+            training_id: feedback.training_id,
+            employee_empid: feedback.employee_empid,
+            knowledge_retention: feedback.knowledge_retention || null,
+            practical_application: feedback.practical_application || null,
+            engagement_level: feedback.engagement_level || null,
+            improvement_areas: feedback.improvement_areas || '',
+            strengths: feedback.strengths || '',
+            overall_performance: feedback.overall_performance,
+            additional_comments: feedback.additional_comments || ''
+          };
+        }
+      },
+      error: (err) => {
+        // No existing feedback, that's okay
+        console.log('No existing feedback found');
+      }
+    });
+  }
+
+  // Close feedback modal
+  closeFeedbackModal(): void {
+    this.showFeedbackModal = false;
+    this.selectedSubmissionForFeedback = null;
+    this.existingFeedback = null;
+    this.performanceFeedback = {
+      training_id: 0,
+      employee_empid: '',
+      knowledge_retention: null,
+      practical_application: null,
+      engagement_level: null,
+      improvement_areas: '',
+      strengths: '',
+      overall_performance: 3,
+      additional_comments: ''
+    };
+  }
+
+  // Submit performance feedback
+  submitPerformanceFeedback(): void {
+    if (!this.selectedSubmissionForFeedback) return;
+    
+    // Validate required fields
+    if (this.performanceFeedback.overall_performance < 1 || this.performanceFeedback.overall_performance > 5) {
+      this.toastService.error('Overall performance rating must be between 1 and 5');
+      return;
+    }
+
+    // Validate optional ratings
+    const ratings = [
+      { name: 'Knowledge Retention', value: this.performanceFeedback.knowledge_retention },
+      { name: 'Practical Application', value: this.performanceFeedback.practical_application },
+      { name: 'Engagement Level', value: this.performanceFeedback.engagement_level }
+    ];
+
+    for (const rating of ratings) {
+      if (rating.value !== null && (rating.value < 1 || rating.value > 5)) {
+        this.toastService.error(`${rating.name} rating must be between 1 and 5`);
+        return;
+      }
+    }
+
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' });
+    
+    this.isSubmittingFeedback = true;
+    
+    const payload = {
+      training_id: this.performanceFeedback.training_id,
+      employee_empid: this.performanceFeedback.employee_empid,
+      knowledge_retention: this.performanceFeedback.knowledge_retention,
+      practical_application: this.performanceFeedback.practical_application,
+      engagement_level: this.performanceFeedback.engagement_level,
+      improvement_areas: this.performanceFeedback.improvement_areas || null,
+      strengths: this.performanceFeedback.strengths || null,
+      overall_performance: this.performanceFeedback.overall_performance,
+      additional_comments: this.performanceFeedback.additional_comments || null
+    };
+
+    this.http.post<ManagerPerformanceFeedback>(this.apiService.managerPerformanceFeedbackUrl, payload, { headers }).subscribe({
+      next: (response) => {
+        this.isSubmittingFeedback = false;
+        this.toastService.success('Performance feedback submitted successfully!');
+        this.closeFeedbackModal();
+        // Refresh team submissions to update status
+        this.fetchTeamSubmissions();
+      },
+      error: (err) => {
+        this.isSubmittingFeedback = false;
+        console.error('Failed to submit feedback:', err);
+        if (err.status === 403) {
+          this.toastService.error('You can only provide feedback for employees in your team.');
+        } else if (err.status === 400) {
+          this.toastService.error(err.error?.detail || 'Invalid feedback data. Please check your ratings.');
+        } else {
+          this.toastService.error(`Failed to submit feedback. Error: ${err.statusText || 'Unknown error'}`);
+        }
       }
     });
   }
@@ -842,7 +952,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       assessment_details: this.newTraining.assessment_details
     };
 
-    this.http.post('http://localhost:8000/trainings/', payload, { headers }).subscribe({
+    this.http.post(this.apiService.trainingsUrl, payload, { headers }).subscribe({
         next: (response) => {
             this.toastService.success('Training scheduled successfully!');
             this.closeScheduleTrainingModal();
@@ -854,11 +964,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
               const errorDetails = err.error.detail.map((e: any) => `- Field '${e.loc[1]}': ${e.msg}`).join('\n');
               const fullErrorMessage = `Please correct the following errors:\n${errorDetails}`;
               this.errorMessage = fullErrorMessage;
-              alert(fullErrorMessage);
+              this.toastService.error(fullErrorMessage, 'Validation Error');
             } else {
               const detail = err.error?.detail || 'An unknown error occurred. Check the server logs.';
               this.errorMessage = `Failed to schedule training: ${detail}`;
-              alert(this.errorMessage);
+              this.toastService.error(this.errorMessage, 'Error');
             }
         }
     });
@@ -892,7 +1002,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       manager_notes: notes || null
     };
 
-    this.http.put(`http://localhost:8000/training-requests/${request.id}/respond`, responseData, { headers }).subscribe({
+    this.http.put(this.apiService.trainingRequestRespondUrl(request.id), responseData, { headers }).subscribe({
       next: (response) => {
         this.toastService.success(`Training request ${status} successfully!`);
         this.fetchPendingRequests(); // Refresh the requests list
@@ -911,7 +1021,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
+    this.http.get<TrainingDetail[]>(this.apiService.trainingsUrl, { headers }).subscribe({
       next: (data) => {
         console.log('Training catalog data loaded:', data);
         this.trainingCatalog = data;
@@ -938,7 +1048,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.get<TrainingDetail[]>('http://localhost:8000/trainings/', { headers }).subscribe({
+    this.http.get<TrainingDetail[]>(this.apiService.trainingsUrl, { headers }).subscribe({
       next: (response) => {
         this.allTrainings = response;
         // Clear cache when trainings are updated
@@ -963,7 +1073,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
-    this.http.get<TrainingRequest[]>('http://localhost:8000/training-requests/pending', { headers }).subscribe({
+    this.http.get<TrainingRequest[]>(this.apiService.pendingTrainingRequestsUrl, { headers }).subscribe({
       next: (response) => {
         this.pendingRequests = response || [];
       },
@@ -980,7 +1090,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     
     // For managers, only fetch personal assigned trainings (assigned to the manager by their manager)
     // Team assigned trainings should not be shown in the "Assigned Trainings" tab
-    this.http.get<TrainingDetail[]>('http://localhost:8000/assignments/my', { headers }).subscribe({
+    this.http.get<TrainingDetail[]>(this.apiService.myAssignmentsUrl, { headers }).subscribe({
       next: (response) => {
         console.log('Personal assigned trainings loaded:', response);
         this.assignedTrainings = (response || []).map(t => ({ ...t, assignmentType: 'personal' as const }));
@@ -1109,7 +1219,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
 
-    this.http.get<any>(this.API_ENDPOINT, { headers }).subscribe({
+    this.http.get<any>(this.apiService.getUrl(this.API_ENDPOINT), { headers }).subscribe({
       next: (response) => {
         this.manager = response;
         const anyResp: any = response as any;
@@ -1256,7 +1366,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       
       const payload = { training_id: trainingId, employee_username: memberId };
       assignmentObservables.push(
-        this.http.post('http://localhost:8000/assignments/', payload, { headers }).pipe(
+        this.http.post(this.apiService.assignmentsUrl, payload, { headers }).pipe(
           map(() => {
             // Add to existing assignments to prevent immediate re-assignment
             const key = `${trainingId}_${memberId}`;
@@ -1678,7 +1788,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       });
-      this.http.put('http://localhost:8000/data/manager/team-skill', updateRequest, { headers })
+      this.http.put(this.apiService.managerTeamSkillUpdateUrl, updateRequest, { headers })
         .subscribe({
           next: (response: any) => {
             skill.current_expertise = response.current_expertise;
@@ -1705,7 +1815,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const token = this.authService.getToken();
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.get<any[]>('http://localhost:8000/additional-skills/', { headers }).subscribe({
+    this.http.get<any[]>(this.apiService.additionalSkillsUrl, { headers }).subscribe({
       next: (skills) => { this.additionalSkills = skills; },
       error: (err) => { this.additionalSkills = []; }
     });
@@ -1730,7 +1840,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         description: this.newSkill.description.trim() || null
       };
       if (this.editingSkillId) {
-        this.http.put<any>(`http://localhost:8000/additional-skills/${this.editingSkillId}`, skillData, { headers }).subscribe({
+        this.http.put<any>(this.apiService.additionalSkillUrl(this.editingSkillId), skillData, { headers }).subscribe({
           next: (updatedSkill) => {
             const index = this.additionalSkills.findIndex(s => s.id === this.editingSkillId);
             if (index !== -1) { this.additionalSkills[index] = updatedSkill; }
@@ -1740,7 +1850,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
           error: (err) => { console.error('Failed to update skill:', err); }
         });
       } else {
-        this.http.post<any>('http://localhost:8000/additional-skills/', skillData, { headers }).subscribe({
+        this.http.post<any>(this.apiService.additionalSkillsUrl, skillData, { headers }).subscribe({
           next: (newSkill) => {
             this.additionalSkills.push(newSkill);
             this.resetNewSkillForm();
@@ -1756,7 +1866,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const token = this.authService.getToken();
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    this.http.delete(`http://localhost:8000/additional-skills/${skillId}`, { headers }).subscribe({
+    this.http.delete(this.apiService.additionalSkillUrl(skillId), { headers }).subscribe({
       next: () => { this.additionalSkills = this.additionalSkills.filter(skill => skill.id !== skillId); },
       error: (err) => { console.error('Failed to delete skill:', err); }
     });
@@ -1916,7 +2026,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
     // Check if assignment is shared (for trainers)
-    this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+    this.http.get(this.apiService.trainerAssignmentsUrl(trainingId), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.sharedAssignments.set(trainingId, true);
@@ -1936,7 +2046,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     });
     
     // Check if feedback is shared (for trainers)
-    this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+    this.http.get(this.apiService.trainerFeedbackUrl(trainingId), { headers }).subscribe({
       next: (response: any) => {
         if (response) {
           this.sharedFeedback.set(trainingId, true);
@@ -1972,7 +2082,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const token = this.authService.getToken();
     if (token) {
       const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-      this.http.get(`http://localhost:8000/shared-content/trainer/assignments/${trainingId}`, { headers }).subscribe({
+      this.http.get(this.apiService.trainerAssignmentsUrl(trainingId), { headers }).subscribe({
         next: (response: any) => {
           if (response) {
             // Assignment already exists - load it for editing
@@ -2017,7 +2127,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const token = this.authService.getToken();
     if (token) {
       const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-      this.http.get(`http://localhost:8000/shared-content/trainer/feedback/${trainingId}`, { headers }).subscribe({
+      this.http.get(this.apiService.trainerFeedbackUrl(trainingId), { headers }).subscribe({
         next: (response: any) => {
           if (response) {
             // Feedback already exists - load it for editing
@@ -2067,22 +2177,22 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
 
   submitAssignment(): void {
     if (!this.newAssignment.trainingId || !this.newAssignment.title.trim() || this.newAssignment.questions.length === 0) {
-      alert('Please select a training, provide a title, and add at least one question.');
+      this.toastService.warning('Please select a training, provide a title, and add at least one question.', 'Validation Error');
       return;
     }
 
     for (const q of this.newAssignment.questions) {
       if (!q.text.trim()) {
-        alert('Please ensure all questions have text.');
+        this.toastService.warning('Please ensure all questions have text.', 'Validation Error');
         return;
       }
       if (q.type === 'single-choice' || q.type === 'multiple-choice') {
         if (q.options.some(opt => !opt.text.trim())) {
-          alert('Please ensure all options have text.');
+          this.toastService.warning('Please ensure all options have text.', 'Validation Error');
           return;
         }
         if (!q.options.some(opt => opt.isCorrect)) {
-          alert(`Please mark at least one correct answer for the question: "${q.text}"`);
+          this.toastService.warning(`Please mark at least one correct answer for the question: "${q.text}"`, 'Validation Error');
           return;
         }
       }
@@ -2102,7 +2212,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       questions: this.newAssignment.questions
     };
 
-    this.http.post('http://localhost:8000/shared-content/assignments', payload, { headers }).subscribe({
+    this.http.post(this.apiService.sharedAssignmentsUrl, payload, { headers }).subscribe({
       next: (response: any) => {
         if (this.newAssignment.trainingId) {
           this.sharedAssignments.set(this.newAssignment.trainingId, true);
@@ -2203,7 +2313,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
 
   submitFeedback(): void {
     if (!this.newFeedback.trainingId) {
-      alert('Please select a training for the feedback form.');
+      this.toastService.warning('Please select a training for the feedback form.', 'Validation Error');
       return;
     }
     const finalCustomQuestions = this.newFeedback.customQuestions
@@ -2231,7 +2341,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       customQuestions: finalCustomQuestions
     };
 
-    this.http.post('http://localhost:8000/shared-content/feedback', payload, { headers }).subscribe({
+    this.http.post(this.apiService.sharedFeedbackUrl, payload, { headers }).subscribe({
       next: (response: any) => {
         if (this.newFeedback.trainingId) {
           this.sharedFeedback.set(this.newFeedback.trainingId, true);
@@ -2361,6 +2471,6 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   // --- Training Enrollment ---
   enrollInTraining(training: TrainingDetail): void {
     // This is a placeholder method. In a real app, you would make an API call here.
-    alert(`Enrolled in "${training.training_name}" successfully!`);
+    this.toastService.success(`Enrolled in "${training.training_name}" successfully!`, 'Enrollment Successful');
   }
 }

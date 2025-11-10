@@ -393,93 +393,93 @@
 
         <div *ngIf="dashboardView === 'team'" class="space-y-4">
           <div class="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200/60 p-4">
-            <h3 class="text-lg font-bold text-slate-900 mb-4">Team Skills Matrix</h3>
-            <div class="overflow-x-auto">
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Team Skills Matrix</h3>
+            <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
               <table class="w-full">
-                <thead>
+                <thead class="sticky top-0 bg-white z-10">
                   <tr class="border-b-2 border-slate-200">
-                    <th class="text-left py-3 px-4 text-sm font-semibold text-slate-700">Team Member</th>
-                    <th class="text-center py-3 px-4 text-sm font-semibold text-slate-700">
-                      <div class="flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-check-circle text-green-600"></i>
+                    <th class="text-left py-1.5 px-2 text-xs font-semibold text-slate-700">Team Member</th>
+                    <th class="text-center py-1.5 px-2 text-xs font-semibold text-slate-700">
+                      <div class="flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-check-circle text-green-600 text-[10px]"></i>
                         <span>Skills Met</span>
                       </div>
                     </th>
-                    <th class="text-center py-3 px-4 text-sm font-semibold text-slate-700">
-                      <div class="flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-exclamation-triangle text-orange-600"></i>
+                    <th class="text-center py-1.5 px-2 text-xs font-semibold text-slate-700">
+                      <div class="flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-exclamation-triangle text-orange-600 text-[10px]"></i>
                         <span>Skill Gaps</span>
                       </div>
                     </th>
-                    <th class="text-center py-3 px-4 text-sm font-semibold text-slate-700">Total Skills</th>
-                    <th class="text-center py-3 px-4 text-sm font-semibold text-slate-700">Progress</th>
+                    <th class="text-center py-1.5 px-2 text-xs font-semibold text-slate-700">Total Skills</th>
+                    <th class="text-center py-1.5 px-2 text-xs font-semibold text-slate-700">Progress</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr *ngFor="let member of manager?.team || []" 
                       class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td class="py-3 px-4">
-                      <div class="flex items-center gap-2">
-                        <img src="https://ui-avatars.com/api/?name={{member.name}}&background=random&color=fff&size=32" 
+                    <td class="py-1.5 px-2">
+                      <div class="flex items-center gap-1.5">
+                        <img src="https://ui-avatars.com/api/?name={{member.name}}&background=random&color=fff&size=24" 
                              alt="{{member.name}}" 
-                             class="rounded-full h-8 w-8">
-                        <span class="text-sm font-medium text-slate-800">{{ member.name }}</span>
+                             class="rounded-full h-6 w-6">
+                        <span class="text-xs font-medium text-slate-800">{{ member.name }}</span>
                       </div>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-xs">
                         {{ getTeamSkillsMetCount(member) }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-100 text-orange-700 font-bold text-sm">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-700 font-bold text-xs">
                         {{ getTeamSkillsGapCount(member) }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="text-sm font-medium text-slate-600">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="text-xs font-medium text-slate-600">
                         {{ member.skills.length }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <div class="flex items-center justify-center gap-2">
-                        <div class="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <td class="py-1.5 px-2 text-center">
+                      <div class="flex items-center justify-center gap-1.5">
+                        <div class="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                           <div class="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-300"
                                [style.width.%]="getMemberProgressPercentage(member)"></div>
                         </div>
-                        <span class="text-xs font-medium text-slate-600 min-w-[3rem]">
+                        <span class="text-[10px] font-medium text-slate-600 min-w-[2.5rem]">
                           {{ getMemberProgressPercentage(member) }}%
                         </span>
                       </div>
                     </td>
                   </tr>
                   <tr *ngIf="!manager?.team || manager.team.length === 0" class="border-b border-slate-100">
-                    <td colspan="5" class="py-8 text-center text-slate-500">
-                      <i class="fa-solid fa-users text-2xl mb-2 block"></i>
-                      <p>No team members found</p>
+                    <td colspan="5" class="py-6 text-center text-slate-500">
+                      <i class="fa-solid fa-users text-xl mb-2 block"></i>
+                      <p class="text-xs">No team members found</p>
                     </td>
                   </tr>
                 </tbody>
-                <tfoot>
+                <tfoot class="sticky bottom-0 bg-slate-50">
                   <tr class="bg-slate-50 border-t-2 border-slate-200">
-                    <td class="py-3 px-4 text-sm font-bold text-slate-800">Total</td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-200 text-green-800 font-bold text-sm">
+                    <td class="py-1.5 px-2 text-xs font-bold text-slate-800">Total</td>
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-200 text-green-800 font-bold text-xs">
                         {{ teamSkillsMet }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-200 text-orange-800 font-bold text-sm">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-200 text-orange-800 font-bold text-xs">
                         {{ teamSkillsGap }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="text-sm font-bold text-slate-700">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="text-xs font-bold text-slate-700">
                         {{ getTotalTeamSkillsCount() }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-center">
-                      <span class="text-sm font-bold text-slate-700">
+                    <td class="py-1.5 px-2 text-center">
+                      <span class="text-xs font-bold text-slate-700">
                         {{ getTeamProgressPercentage() }}%
                       </span>
                     </td>
@@ -527,30 +527,34 @@
                   <div class="space-y-2">
                     <div *ngFor="let submission of teamAssignmentSubmissions" 
                          class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 border border-green-200 hover:shadow-md transition-all">
-                      <div class="flex items-start justify-between">
+                      <div class="flex items-start justify-between gap-3">
                         <div class="flex-1 min-w-0">
                           <div class="flex items-center gap-2 mb-1.5 flex-wrap">
                             <h5 class="font-bold text-slate-900 text-sm truncate">{{ submission.training_name }}</h5>
                             <span class="px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0"
                                   [ngClass]="{
-                                    'bg-green-100 text-green-700': submission.score >= 80,
-                                    'bg-yellow-100 text-yellow-700': submission.score >= 60 && submission.score < 80,
-                                    'bg-red-100 text-red-700': submission.score < 60
+                                    'bg-green-100 text-green-700': submission.has_feedback,
+                                    'bg-red-100 text-red-700': !submission.has_feedback
                                   }">
-                              {{ submission.score }}%
+                              {{ submission.has_feedback ? '100' : '0' }}%
                             </span>
                           </div>
                           <p class="text-xs text-slate-600 mb-1">
                             <i class="fa-solid fa-user mr-1"></i>
                             <span class="font-medium">{{ submission.employee_name }}</span>
                             <span class="mx-1">•</span>
-                            <span>{{ submission.correct_answers }}/{{ submission.total_questions }}</span>
+                            <span>{{ submission.feedback_count || 0 }}/1</span>
                           </p>
                           <p class="text-xs text-slate-500">
                             <i class="fa-solid fa-clock mr-1"></i>
                             {{ submission.submitted_at | date:'short' }}
                           </p>
                         </div>
+                        <button (click)="openFeedbackModal(submission, 'assignment')" 
+                                class="flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1.5 shadow-sm">
+                          <i class="fa-solid fa-comment-dots"></i>
+                          Provide Feedback
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -573,10 +577,6 @@
                               {{ submission.responses.length }}
                             </span>
                           </div>
-                          <p class="text-xs text-slate-600 mb-1">
-                            <i class="fa-solid fa-user mr-1"></i>
-                            <span class="font-medium">{{ submission.employee_name }}</span>
-                          </p>
                           <p class="text-xs text-slate-500 mb-2">
                             <i class="fa-solid fa-clock mr-1"></i>
                             {{ submission.submitted_at | date:'short' }}
@@ -635,7 +635,7 @@
                         <p class="text-[10px] text-slate-500 mb-0.5">by {{ request.training.trainer_name }}</p>
                         <p class="text-[10px] font-semibold text-blue-600">
                           <i class="fa-solid fa-user mr-0.5"></i>
-                          {{ request.employee.name || request.employee.username }}
+                          {{ request.employee?.name || request.employee?.username || 'Unknown' }}
                         </p>
                       </div>
                     </div>
@@ -1872,6 +1872,159 @@
               </button>
               <button (click)="confirmProceedWithAssignments()" class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl">
                 <i class="fa-solid fa-check mr-2"></i>Proceed with New Assignments
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Feedback Modal -->
+      <div *ngIf="showFeedbackModal && selectedSubmissionForFeedback" @modalScale class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" (click)="closeFeedbackModal()">
+        <div (click)="$event.stopPropagation()" class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border-2 border-indigo-200 transform transition-all duration-300">
+          <!-- Header -->
+          <div class="sticky top-0 z-10 bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 text-white">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border-2 border-white/30">
+                  <i class="fa-solid fa-comment-dots text-2xl text-white"></i>
+                </div>
+                <div>
+                  <h2 class="text-2xl font-bold">Performance Feedback</h2>
+                  <p class="text-indigo-100 mt-1 text-sm">
+                    {{ selectedSubmissionForFeedback.submission.training_name }} - {{ selectedSubmissionForFeedback.submission.employee_name }}
+                  </p>
+                  <p *ngIf="existingFeedback" class="text-xs text-indigo-200 mt-1">
+                    <i class="fa-solid fa-info-circle mr-1"></i>Updating existing feedback (Last updated: {{ existingFeedback.updated_at | date:'short' }})
+                  </p>
+                </div>
+              </div>
+              <button (click)="closeFeedbackModal()" class="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur-sm">
+                <i class="fa-solid fa-times text-white"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="p-6 space-y-6">
+            <!-- Performance Ratings -->
+            <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
+              <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-star text-amber-500"></i>
+                Performance Ratings (1-5 Scale)
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <!-- Knowledge Retention -->
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    Knowledge Retention
+                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                  </label>
+                  <select [(ngModel)]="performanceFeedback.knowledge_retention" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option [value]="null">Not Rated</option>
+                    <option [value]="1">1 - Poor</option>
+                    <option [value]="2">2 - Below Average</option>
+                    <option [value]="3">3 - Average</option>
+                    <option [value]="4">4 - Good</option>
+                    <option [value]="5">5 - Excellent</option>
+                  </select>
+                </div>
+
+                <!-- Practical Application -->
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    Practical Application
+                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                  </label>
+                  <select [(ngModel)]="performanceFeedback.practical_application" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option [value]="null">Not Rated</option>
+                    <option [value]="1">1 - Poor</option>
+                    <option [value]="2">2 - Below Average</option>
+                    <option [value]="3">3 - Average</option>
+                    <option [value]="4">4 - Good</option>
+                    <option [value]="5">5 - Excellent</option>
+                  </select>
+                </div>
+
+                <!-- Engagement Level -->
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    Engagement Level
+                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                  </label>
+                  <select [(ngModel)]="performanceFeedback.engagement_level" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option [value]="null">Not Rated</option>
+                    <option [value]="1">1 - Poor</option>
+                    <option [value]="2">2 - Below Average</option>
+                    <option [value]="3">3 - Average</option>
+                    <option [value]="4">4 - Good</option>
+                    <option [value]="5">5 - Excellent</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Overall Performance -->
+              <div class="mt-5">
+                <label class="block text-sm font-semibold text-slate-700 mb-2">
+                  Overall Performance <span class="text-red-500">*</span>
+                </label>
+                <select [(ngModel)]="performanceFeedback.overall_performance" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <option [value]="1">1 - Poor</option>
+                  <option [value]="2">2 - Below Average</option>
+                  <option [value]="3">3 - Average</option>
+                  <option [value]="4">4 - Good</option>
+                  <option [value]="5">5 - Excellent</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Strengths -->
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">
+                <i class="fa-solid fa-thumbs-up text-green-600 mr-1"></i>
+                Key Strengths
+                <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+              </label>
+              <textarea [(ngModel)]="performanceFeedback.strengths" rows="3" 
+                        placeholder="Describe the key strengths demonstrated by the employee during this training..."
+                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            </div>
+
+            <!-- Improvement Areas -->
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">
+                <i class="fa-solid fa-arrow-up text-amber-600 mr-1"></i>
+                Areas for Improvement
+                <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+              </label>
+              <textarea [(ngModel)]="performanceFeedback.improvement_areas" rows="3" 
+                        placeholder="Describe areas where the employee can improve..."
+                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            </div>
+
+            <!-- Additional Comments -->
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">
+                <i class="fa-solid fa-comment text-blue-600 mr-1"></i>
+                Additional Comments
+                <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+              </label>
+              <textarea [(ngModel)]="performanceFeedback.additional_comments" rows="4" 
+                        placeholder="Any additional comments or observations..."
+                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
+              <button (click)="closeFeedbackModal()" 
+                      class="flex-1 bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-300 transition-all duration-200">
+                <i class="fa-solid fa-times mr-2"></i>Cancel
+              </button>
+              <button (click)="submitPerformanceFeedback()" 
+                      [disabled]="isSubmittingFeedback"
+                      class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl">
+                <i *ngIf="!isSubmittingFeedback" class="fa-solid fa-check mr-2"></i>
+                <i *ngIf="isSubmittingFeedback" class="fa-solid fa-spinner fa-spin mr-2"></i>
+                {{ isSubmittingFeedback ? 'Submitting...' : (existingFeedback ? 'Update Feedback' : 'Submit Feedback') }}
               </button>
             </div>
           </div>

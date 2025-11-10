@@ -4,6 +4,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AuthService } from '../../services/auth.service';
+import { ApiService } from '../../services/api.service';
 
 @Component({
   selector: 'app-login',
@@ -25,7 +26,8 @@ export class LoginComponent implements OnInit {
     private fb: FormBuilder,
     private router: Router,
     private http: HttpClient,
-    private authService: AuthService
+    private authService: AuthService,
+    private apiService: ApiService
   ) {}
 
   ngOnInit(): void {
@@ -51,7 +53,7 @@ export class LoginComponent implements OnInit {
     };
 
     this.http
-      .post<any>('http://localhost:8000/login', body, {
+      .post<any>(this.apiService.loginUrl, body, {
         headers: new HttpHeaders({
           'Content-Type': 'application/json',
         }),
