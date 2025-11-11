@@ -410,7 +410,14 @@
                                      class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-2.5 border border-indigo-200 hover:shadow-md transition-all">
                                     <div class="flex items-start justify-between gap-2 mb-1.5">
                                         <div class="flex-1 min-w-0">
-                                            <h4 class="font-bold text-slate-900 text-xs truncate">{{ feedback.training_name }}</h4>
+                                            <div class="flex items-center gap-1.5 mb-0.5">
+                                                <h4 class="font-bold text-slate-900 text-xs truncate">{{ feedback.training_name }}</h4>
+                                                <span *ngIf="isFeedbackRecentlyUpdated(feedback)" 
+                                                      class="px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
+                                                      title="Recently updated">
+                                                    <i class="fa-solid fa-sync-alt mr-0.5"></i>Updated
+                                                </span>
+                                            </div>
                                             <p class="text-[10px] text-slate-600 mt-0.5">
                                                 <i class="fa-solid fa-user-tie mr-1"></i>
                                                 {{ feedback.manager_name }}
@@ -809,11 +816,8 @@
                                     <button *ngIf="!isAssignmentSubmitted(t.id)" (click)="takeExam(t)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-file-lines mr-1.5"></i>Take Assignment
                                     </button>
-                                    <button *ngIf="isAssignmentSubmitted(t.id) && isAssignmentCompleted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                    <button *ngIf="isAssignmentSubmitted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-check-circle mr-1.5"></i>Assignment Submitted
-                                    </button>
-                                    <button *ngIf="isAssignmentSubmitted(t.id) && !isAssignmentCompleted(t.id)" (click)="takeExam(t)" class="flex-1 bg-orange-500 text-white font-semibold py-1 rounded-lg hover:bg-orange-700 transition-colors duration-200 text-xs">
-                                        <i class="fa-solid fa-redo mr-1.5"></i>Retake Test
                                     </button>
                                     <button *ngIf="isAssignmentSubmitted(t.id)" (click)="viewAssignmentResult(t)" class="flex-1 bg-blue-600 text-white font-semibold py-1 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-chart-line mr-1.5"></i>View Results

@@ -352,7 +352,12 @@ export class EngineerDashboardComponent implements OnInit {
     
     this.http.get<any[]>(this.apiService.getUrl('/shared-content/employee/performance-feedback'), { headers }).subscribe({
       next: (feedback) => {
-        this.managerFeedback = feedback;
+        // Sort feedback by updated_at (most recent first)
+        this.managerFeedback = (feedback || []).sort((a, b) => {
+          const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+          return dateB - dateA; // Descending order (newest first)
+        });
         this.isLoadingFeedback = false;
       },
       error: (err) => {
@@ -382,6 +387,16 @@ export class EngineerDashboardComponent implements OnInit {
     if (rating >= 4) return 'bg-green-100 text-green-700';
     if (rating >= 3) return 'bg-yellow-100 text-yellow-700';
     return 'bg-red-100 text-red-700';
+  }
+
+  // Check if feedback was recently updated (within last 24 hours)
+  isFeedbackRecentlyUpdated(feedback: any): boolean {
+    if (!feedback.updated_at) return false;
+    const updatedDate = new Date(feedback.updated_at);
+    const now = new Date();
+    const hoursDiff = (now.getTime() - updatedDate.getTime()) / (1000 * 60 * 60);
+    // Show "Updated" badge if feedback was updated within last 24 hours
+    return hoursDiff < 24 && feedback.updated_at !== feedback.created_at;
   }
 
   // --- Calendar logic ---
@@ -1622,9 +1637,9 @@ export class EngineerDashboardComponent implements OnInit {
   }
 
   takeExam(training: TrainingDetail): void {
-    // Check if already submitted and completed (100%)
-    if (this.isAssignmentSubmitted(training.id) && this.isAssignmentCompleted(training.id)) {
-      this.toastService.warning('You have already completed this assignment with 100% score. Click "View Results" to see your score.');
+    // Check if already submitted - prevent retaking
+    if (this.isAssignmentSubmitted(training.id)) {
+      this.toastService.warning('You have already submitted this assignment. Click "View Results" to see your score.');
       return;
     }
 
@@ -1644,12 +1659,9 @@ export class EngineerDashboardComponent implements OnInit {
               if (result) {
                 this.assignmentSubmissionStatus.set(training.id, true);
                 this.assignmentScores.set(training.id, result.score || 0);
-                // Only block if score is 100%
-                if (result.score === 100) {
-                  this.toastService.warning('You have already completed this assignment with 100% score. Click "View Results" to see your score.');
-                  return;
-                }
-                // If score < 100%, allow retake
+                // Block retaking if already submitted
+                this.toastService.warning('You have already submitted this assignment. Click "View Results" to see your score.');
+                return;
               }
               // Initialize exam
               this.initializeExam(response);
@@ -1940,6 +1952,8 @@ export class EngineerDashboardComponent implements OnInit {
       // Refresh dashboard data and all related data
       this.fetchDashboardData();
       this.fetchAssignedTrainings();
+      // Refresh manager feedback to show latest updates
+      this.fetchManagerFeedback();
     }
     if (tabName === 'mySkills') {
       // Refresh skills data
@@ -1954,6 +1968,8 @@ export class EngineerDashboardComponent implements OnInit {
     if (tabName === 'assignedTrainings') {
       // Refresh assigned trainings
       this.fetchAssignedTrainings();
+      // Refresh manager feedback when viewing assigned trainings
+      this.fetchManagerFeedback();
     }
     if (tabName === 'myRequests') {
       // Refresh training requests

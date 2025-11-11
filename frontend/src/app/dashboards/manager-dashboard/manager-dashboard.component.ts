@@ -67,6 +67,8 @@ interface TeamFeedbackSubmission {
     employee_name: string;
     responses: Array<{ questionIndex: number; questionText: string; selectedOption: string }>;
     submitted_at: string;
+    has_feedback?: boolean;
+    feedback_count?: number;
 }
 
 interface ManagerPerformanceFeedback {
@@ -328,6 +330,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   };
   isSubmittingFeedback: boolean = false;
   existingFeedback: ManagerPerformanceFeedback | null = null;
+  showSuccessPopup: boolean = false;
+  successPopupMessage: string = '';
 
   private readonly API_ENDPOINT = '/data/manager/dashboard';
 
@@ -777,6 +781,33 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     };
   }
 
+  // Update submission feedback status locally
+  updateSubmissionFeedbackStatus(trainingId: number, employeeEmpid: string, hasFeedback: boolean): void {
+    // Update assignment submissions
+    const assignmentSubmission = this.teamAssignmentSubmissions.find(
+      s => s.training_id === trainingId && s.employee_empid === employeeEmpid
+    );
+    if (assignmentSubmission) {
+      assignmentSubmission.has_feedback = hasFeedback;
+      assignmentSubmission.feedback_count = hasFeedback ? 1 : 0;
+    }
+
+    // Update feedback submissions
+    const feedbackSubmission = this.teamFeedbackSubmissions.find(
+      s => s.training_id === trainingId && s.employee_empid === employeeEmpid
+    );
+    if (feedbackSubmission) {
+      feedbackSubmission.has_feedback = hasFeedback;
+      feedbackSubmission.feedback_count = hasFeedback ? 1 : 0;
+    }
+  }
+
+  // Close success popup
+  closeSuccessPopup(): void {
+    this.showSuccessPopup = false;
+    this.successPopupMessage = '';
+  }
+
   // Submit performance feedback
   submitPerformanceFeedback(): void {
     if (!this.selectedSubmissionForFeedback) return;
@@ -822,9 +853,32 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.http.post<ManagerPerformanceFeedback>(this.apiService.managerPerformanceFeedbackUrl, payload, { headers }).subscribe({
       next: (response) => {
         this.isSubmittingFeedback = false;
-        this.toastService.success('Performance feedback submitted successfully!');
+        const isUpdate = this.existingFeedback !== null;
+        
+        // Update local status immediately
+        this.updateSubmissionFeedbackStatus(
+          this.performanceFeedback.training_id,
+          this.performanceFeedback.employee_empid,
+          true
+        );
+        
+        // Show success popup
+        this.successPopupMessage = isUpdate 
+          ? 'Feedback updated successfully! The employee will see the updated feedback.'
+          : 'Feedback submitted successfully! The employee will be notified.';
+        this.showSuccessPopup = true;
+        
+        // Auto-close popup after 4 seconds
+        setTimeout(() => {
+          if (this.showSuccessPopup) {
+            this.closeSuccessPopup();
+          }
+        }, 4000);
+        
+        // Close feedback modal
         this.closeFeedbackModal();
-        // Refresh team submissions to update status
+        
+        // Refresh team submissions to update status from backend
         this.fetchTeamSubmissions();
       },
       error: (err) => {

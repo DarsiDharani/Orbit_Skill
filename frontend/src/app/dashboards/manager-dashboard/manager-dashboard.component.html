@@ -553,7 +553,7 @@
                         <button (click)="openFeedbackModal(submission, 'assignment')" 
                                 class="flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors duration-200 flex items-center gap-1.5 shadow-sm">
                           <i class="fa-solid fa-comment-dots"></i>
-                          Provide Feedback
+                          {{ submission.has_feedback ? 'Update Feedback' : 'Provide Feedback' }}
                         </button>
                       </div>
                     </div>
@@ -2028,6 +2028,23 @@
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Success Popup Modal -->
+      <div *ngIf="showSuccessPopup" @modalScale class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" (click)="closeSuccessPopup()">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all" (click)="$event.stopPropagation()">
+          <div class="flex items-center justify-center mb-4">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+              <i class="fa-solid fa-check-circle text-green-600 text-3xl"></i>
+            </div>
+          </div>
+          <h3 class="text-2xl font-bold text-slate-800 text-center mb-3">Success!</h3>
+          <p class="text-slate-600 text-center mb-6">{{ successPopupMessage }}</p>
+          <button (click)="closeSuccessPopup()" 
+                  class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl">
+            <i class="fa-solid fa-check mr-2"></i>OK
+          </button>
         </div>
       </div>
 
