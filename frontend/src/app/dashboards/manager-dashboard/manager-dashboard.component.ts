@@ -333,6 +333,17 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   showSuccessPopup: boolean = false;
   successPopupMessage: string = '';
 
+  // Final Evaluation
+  showFinalEvaluationModal: boolean = false;
+  employeeSkillsForEvaluation: Array<{
+    skill: string;
+    current_expertise: string;
+    target_expertise: string;
+    targetAchieved: boolean;
+  }> = [];
+  isLoadingEmployeeSkills: boolean = false;
+  isSubmittingEvaluation: boolean = false;
+
   private readonly API_ENDPOINT = '/data/manager/dashboard';
 
   levelsSearch = '';
@@ -779,6 +790,155 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       overall_performance: 3,
       additional_comments: ''
     };
+  }
+
+  // Open final evaluation modal from submission card
+  openFinalEvaluationFromCard(submission: TeamAssignmentSubmission | TeamFeedbackSubmission): void {
+    // Determine submission type by checking if it has 'score' property (assignment) or 'responses' property (feedback)
+    const submissionType: 'assignment' | 'feedback' = 'score' in submission ? 'assignment' : 'feedback';
+    
+    // Set the selected submission for feedback
+    this.selectedSubmissionForFeedback = { 
+      type: submissionType, 
+      submission: submission 
+    };
+    // Open the final evaluation modal
+    this.openFinalEvaluationModal();
+  }
+
+  // Open final evaluation modal
+  openFinalEvaluationModal(): void {
+    if (!this.selectedSubmissionForFeedback) return;
+    
+    this.showFinalEvaluationModal = true;
+    this.isLoadingEmployeeSkills = true;
+    this.employeeSkillsForEvaluation = [];
+    
+    const employeeEmpid = this.selectedSubmissionForFeedback.submission.employee_empid;
+    
+    // Try to get skills from already loaded manager data
+    if (this.manager) {
+      const teamMember = this.manager.team.find(member => member.id === employeeEmpid);
+      if (teamMember && teamMember.skills) {
+        this.employeeSkillsForEvaluation = teamMember.skills.map((skill: Competency) => ({
+          skill: skill.skill,
+          current_expertise: skill.current_expertise,
+          target_expertise: skill.target_expertise,
+          targetAchieved: false // Initially unchecked
+        }));
+        this.isLoadingEmployeeSkills = false;
+        return;
+      }
+    }
+    
+    // If not found in loaded data, fetch manager dashboard data
+    const token = this.authService.getToken();
+    if (!token) {
+      this.isLoadingEmployeeSkills = false;
+      return;
+    }
+    
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    // Fetch manager dashboard data to get team member skills
+    this.http.get<any>(this.apiService.getUrl('/data/manager/dashboard'), { headers }).subscribe({
+      next: (data) => {
+        if (data && data.team) {
+          const teamMember = data.team.find((member: TeamMember) => member.id === employeeEmpid);
+          if (teamMember && teamMember.skills) {
+            this.employeeSkillsForEvaluation = teamMember.skills.map((skill: Competency) => ({
+              skill: skill.skill,
+              current_expertise: skill.current_expertise,
+              target_expertise: skill.target_expertise,
+              targetAchieved: false // Initially unchecked
+            }));
+          }
+        }
+        this.isLoadingEmployeeSkills = false;
+      },
+      error: (err) => {
+        console.error('Failed to fetch employee skills:', err);
+        this.toastService.error('Failed to load employee skills for evaluation');
+        this.isLoadingEmployeeSkills = false;
+      }
+    });
+  }
+
+  // Close final evaluation modal
+  closeFinalEvaluationModal(): void {
+    this.showFinalEvaluationModal = false;
+    this.employeeSkillsForEvaluation = [];
+  }
+
+  // Get count of achieved skills
+  getAchievedSkillsCount(): number {
+    return this.employeeSkillsForEvaluation.filter(skill => skill.targetAchieved).length;
+  }
+
+  // Submit final evaluation
+  submitFinalEvaluation(): void {
+    if (!this.selectedSubmissionForFeedback) return;
+    
+    const achievedSkills = this.employeeSkillsForEvaluation.filter(skill => skill.targetAchieved);
+    if (achievedSkills.length === 0) {
+      this.toastService.error('Please select at least one skill that has achieved its target state');
+      return;
+    }
+
+    this.isSubmittingEvaluation = true;
+    
+    const token = this.authService.getToken();
+    if (!token) {
+      this.isSubmittingEvaluation = false;
+      return;
+    }
+    
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' });
+    const employeeEmpid = this.selectedSubmissionForFeedback.submission.employee_empid;
+    
+    // Update each achieved skill
+    const updatePromises = achievedSkills.map(skill => {
+      const payload = {
+        employee_username: employeeEmpid,
+        skill_name: skill.skill,
+        current_expertise: skill.target_expertise, // Update current to match target
+        target_expertise: skill.target_expertise
+      };
+      
+      return this.http.put(this.apiService.getUrl('/data/manager/team-skill'), payload, { headers }).toPromise();
+    });
+
+    // Execute all updates
+    Promise.all(updatePromises).then(() => {
+      this.isSubmittingEvaluation = false;
+      
+      // Show success message
+      this.successPopupMessage = `Successfully updated ${achievedSkills.length} skill${achievedSkills.length !== 1 ? 's' : ''} and awarded ${achievedSkills.length} badge${achievedSkills.length !== 1 ? 's' : ''}!`;
+      this.showSuccessPopup = true;
+      
+      // Auto-close popup after 4 seconds
+      setTimeout(() => {
+        if (this.showSuccessPopup) {
+          this.closeSuccessPopup();
+        }
+      }, 4000);
+      
+      // Close evaluation modal
+      this.closeFinalEvaluationModal();
+      
+      // Refresh team data to reflect changes
+      this.fetchDashboardData();
+      
+      this.toastService.success(`Final evaluation completed! ${achievedSkills.length} badge${achievedSkills.length !== 1 ? 's' : ''} awarded.`);
+    }).catch((err) => {
+      this.isSubmittingEvaluation = false;
+      console.error('Failed to submit final evaluation:', err);
+      if (err.status === 403) {
+        this.toastService.error('You can only update skills for employees in your team.');
+      } else {
+        this.toastService.error(`Failed to submit final evaluation. Error: ${err.statusText || 'Unknown error'}`);
+      }
+    });
   }
 
   // Update submission feedback status locally
