@@ -1,3 +1,23 @@
+"""
+Additional Skills Routes Module
+
+Purpose: API routes for managing self-reported additional skills
+Features:
+- Get user's additional skills
+- Create new additional skill
+- Update existing additional skill
+- Delete additional skill
+
+Endpoints:
+- GET /additional-skills/: Get all additional skills for current user
+- POST /additional-skills/: Create a new additional skill
+- PUT /additional-skills/{id}: Update an additional skill
+- DELETE /additional-skills/{id}: Delete an additional skill
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select

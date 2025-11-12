@@ -1,3 +1,62 @@
+/**
+ * Engineer Dashboard Component
+ * 
+ * Purpose: Main dashboard for employees/engineers to manage their skills, trainings, and assignments
+ * 
+ * Features:
+ * - Skill Management:
+ *   - View core skills and competency levels (L1-L5)
+ *   - Track skill gaps and progress
+ *   - Add and manage additional self-reported skills
+ *   - View detailed skill breakdowns by competency area
+ * 
+ * - Training Management:
+ *   - Browse training catalog with filtering (skill, level, date)
+ *   - View assigned trainings
+ *   - Request training approvals from managers
+ *   - View training calendar (list and calendar views)
+ *   - Track upcoming trainings
+ * 
+ * - Assignment & Assessment:
+ *   - Take training assignments/exams
+ *   - View assignment results and scores
+ *   - Submit feedback for completed trainings
+ *   - View manager performance feedback
+ * 
+ * - Trainer Zone (if user is a trainer):
+ *   - Schedule new trainings
+ *   - Create and share assignments
+ *   - Create and share feedback forms
+ *   - View shared content
+ * 
+ * - Dashboard Metrics:
+ *   - Skill progress percentage
+ *   - Skills met vs. skills gap count
+ *   - Upcoming trainings count
+ *   - Next training information
+ * 
+ * Key Sections:
+ * 1. Dashboard Tab: Overview with metrics and upcoming trainings
+ * 2. My Skills Tab: Core and additional skills management
+ * 3. Training Catalog Tab: Browse and filter all available trainings
+ * 4. Assigned Trainings Tab: View trainings assigned to the employee
+ * 5. Training Requests Tab: Manage training approval requests
+ * 6. Trainer Zone Tab: Trainer-specific functionality (if applicable)
+ * 
+ * State Management:
+ * - Uses Maps to track assignment/feedback submission status
+ * - Caches training data for performance
+ * - Manages multiple filter states for different views
+ * 
+ * API Integration:
+ * - Uses ApiService for centralized endpoint management
+ * - Implements proper error handling with ToastService
+ * - Handles authentication via AuthService
+ * 
+ * @author Orbit Skill Development Team
+ * @date 2025
+ */
+
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -11,6 +70,9 @@ import { Skill, ModalSkill } from '../../models/skill.model';
 import { TrainingDetail, TrainingRequest, CalendarEvent } from '../../models/training.model';
 import { Assignment, AssignmentQuestion, QuestionOption, UserAnswer, QuestionResult, AssignmentResult, FeedbackQuestion } from '../../models/assignment.model';
 
+/**
+ * Type definitions for skill level structure
+ */
 type LevelBlock = { level: number; items: string[] };
 type Section = { title: string; subtitle?: string; levels: LevelBlock[] };
 
@@ -456,8 +518,10 @@ export class EngineerDashboardComponent implements OnInit {
     const userRole = this.authService.getRole();
 
     if (!token) {
-      this.errorMessage = 'Authentication token not found. Please log in again.';
+      // Silently redirect to login on token expiration
+      this.errorMessage = '';
       this.isLoading = false;
+      this.authService.logout();
       this.router.navigate(['/login']);
       return;
     }
@@ -487,7 +551,8 @@ export class EngineerDashboardComponent implements OnInit {
       }),
       catchError(err => {
         if (err.status === 401) {
-          this.errorMessage = 'Authentication failed. Session may have expired.';
+          // Silently handle token expiration - redirect to login without showing error
+          this.errorMessage = '';
           this.authService.logout();
           this.router.navigate(['/login']);
         } else {
@@ -576,9 +641,8 @@ export class EngineerDashboardComponent implements OnInit {
           error: err.error
         });
         // Don't clear existing data on error - maintain consistency
-        // Only clear if unauthorized
+        // Only clear if unauthorized - silently redirect without showing error
         if (err.status === 401 || err.status === 403) {
-          console.warn('Authentication error in scheduled trainings - redirecting to login');
           this.authService.logout();
           this.router.navigate(['/login']);
         }
@@ -617,9 +681,8 @@ export class EngineerDashboardComponent implements OnInit {
           statusText: err.statusText,
           error: err.error
         });
-        // If unauthorized, redirect to login (don't clear data - let component reinitialize on next login)
+        // If unauthorized, silently redirect to login (don't clear data - let component reinitialize on next login)
         if (err.status === 401 || err.status === 403) {
-          console.warn('Authentication error - redirecting to login');
           // Don't clear data arrays - they will be refreshed when user logs back in
           this.authService.logout();
           this.router.navigate(['/login']);
@@ -639,6 +702,7 @@ export class EngineerDashboardComponent implements OnInit {
     
     // Check assignment submission status for each training
     this.assignedTrainings.forEach(training => {
+      // Check assignment submission status
       this.http.get(this.apiService.getUrl(`/shared-content/assignments/${training.id}/result`), { headers }).subscribe({
         next: (result: any) => {
           if (result) {
@@ -650,6 +714,19 @@ export class EngineerDashboardComponent implements OnInit {
           // No result found means not submitted yet
           this.assignmentSubmissionStatus.set(training.id, false);
           this.assignmentScores.set(training.id, 0);
+        }
+      });
+
+      // Check feedback submission status
+      this.http.get(this.apiService.getUrl(`/shared-content/feedback/${training.id}/result`), { headers }).subscribe({
+        next: (result: any) => {
+          if (result) {
+            this.feedbackSubmissionStatus.set(training.id, true);
+          }
+        },
+        error: (err) => {
+          // No result found means not submitted yet
+          this.feedbackSubmissionStatus.set(training.id, false);
         }
       });
     });
@@ -756,9 +833,8 @@ export class EngineerDashboardComponent implements OnInit {
           error: err.error
         });
         // Don't clear existing data on error - maintain consistency
-        // Only clear if unauthorized
+        // Only clear if unauthorized - silently redirect without showing error
         if (err.status === 401 || err.status === 403) {
-          console.warn('Authentication error in training requests - redirecting to login');
           this.authService.logout();
           this.router.navigate(['/login']);
         }
@@ -847,6 +923,31 @@ export class EngineerDashboardComponent implements OnInit {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return new Date(dateStr) >= today;
+  }
+
+  getTrainingStatus(training: TrainingDetail): 'upcoming' | 'today' | 'past' | 'no-date' {
+    if (!training.training_date) return 'no-date';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const trainingDate = new Date(training.training_date);
+    trainingDate.setHours(0, 0, 0, 0);
+    
+    if (trainingDate.getTime() === today.getTime()) return 'today';
+    if (trainingDate > today) return 'upcoming';
+    return 'past';
+  }
+
+  getTrainingStatusBadge(status: 'upcoming' | 'today' | 'past' | 'no-date'): { text: string; class: string; icon: string } {
+    switch (status) {
+      case 'upcoming':
+        return { text: 'Upcoming', class: 'bg-amber-100 text-amber-800 ring-amber-200', icon: 'fa-clock' };
+      case 'today':
+        return { text: 'Today', class: 'bg-green-100 text-green-800 ring-green-200', icon: 'fa-calendar-day' };
+      case 'past':
+        return { text: 'Past', class: 'bg-slate-100 text-slate-600 ring-slate-200', icon: 'fa-calendar-check' };
+      default:
+        return { text: 'TBD', class: 'bg-gray-100 text-gray-600 ring-gray-200', icon: 'fa-question' };
+    }
   }
 
   get filteredTrainings(): TrainingDetail[] {
@@ -947,7 +1048,9 @@ export class EngineerDashboardComponent implements OnInit {
   scheduleTraining(): void {
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -1129,8 +1232,9 @@ export class EngineerDashboardComponent implements OnInit {
 
     const token = this.authService.getToken();
     if (!token) {
-      console.error('No authentication token found');
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1261,7 +1365,9 @@ export class EngineerDashboardComponent implements OnInit {
 
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1412,7 +1518,9 @@ export class EngineerDashboardComponent implements OnInit {
   enrollInTraining(training: TrainingDetail): void {
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1453,7 +1561,9 @@ export class EngineerDashboardComponent implements OnInit {
   viewAssignment(training: TrainingDetail): void {
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1474,7 +1584,12 @@ export class EngineerDashboardComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to fetch assignment:', err);
-        if (err.status === 403) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 403) {
           this.toastService.error('You can only access assignments for trainings assigned to you.');
         } else if (err.status === 404) {
           this.toastService.warning('No assignment has been shared for this training yet.');
@@ -1494,7 +1609,9 @@ export class EngineerDashboardComponent implements OnInit {
 
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1517,7 +1634,12 @@ export class EngineerDashboardComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to fetch feedback:', err);
-        if (err.status === 403) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 403) {
           this.toastService.error('You can only access feedback for trainings assigned to you.');
         } else if (err.status === 404) {
           this.toastService.warning('No feedback form has been shared for this training yet.');
@@ -1590,7 +1712,9 @@ export class EngineerDashboardComponent implements OnInit {
 
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1609,7 +1733,12 @@ export class EngineerDashboardComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to submit feedback:', err);
-        if (err.status === 403) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 403) {
           this.toastService.error('You can only submit feedback for trainings assigned to you.');
         } else {
           this.toastService.error(`Failed to submit feedback. Error: ${err.statusText || 'Unknown error'}`);
@@ -1645,7 +1774,9 @@ export class EngineerDashboardComponent implements OnInit {
 
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1667,6 +1798,12 @@ export class EngineerDashboardComponent implements OnInit {
               this.initializeExam(response);
             },
             error: (err) => {
+              if (err.status === 401) {
+                // Silently redirect to login on token expiration
+                this.authService.logout();
+                this.router.navigate(['/login']);
+                return;
+              }
               // No result found (404), can take exam
               this.initializeExam(response);
             }
@@ -1677,7 +1814,12 @@ export class EngineerDashboardComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to fetch assignment:', err);
-        if (err.status === 403) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 403) {
           this.toastService.error('You can only access assignments for trainings assigned to you.');
         } else if (err.status === 404) {
           this.toastService.warning('No assignment has been shared for this training yet.');
@@ -1748,8 +1890,10 @@ export class EngineerDashboardComponent implements OnInit {
     this.isSubmittingAssignment = true;
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
       this.isSubmittingAssignment = false;
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1784,7 +1928,12 @@ export class EngineerDashboardComponent implements OnInit {
       error: (err) => {
         this.isSubmittingAssignment = false;
         console.error('Failed to submit assignment:', err);
-        if (err.status === 403) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 403) {
           this.toastService.error('You can only submit assignments for trainings assigned to you.');
         } else {
           this.toastService.error(`Failed to submit assignment. Error: ${err.statusText || 'Unknown error'}`);
@@ -1796,7 +1945,9 @@ export class EngineerDashboardComponent implements OnInit {
   viewAssignmentResult(training: TrainingDetail): void {
     const token = this.authService.getToken();
     if (!token) {
-      this.toastService.error('Authentication error. Please log in again.');
+      // Silently redirect to login on token expiration
+      this.authService.logout();
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -1828,6 +1979,12 @@ export class EngineerDashboardComponent implements OnInit {
               this.showResultModal = true;
             },
             error: (err) => {
+              if (err.status === 401) {
+                // Silently redirect to login on token expiration
+                this.authService.logout();
+                this.router.navigate(['/login']);
+                return;
+              }
               // Still show result even if assignment fetch fails
               this.assignmentResult = {
                 id: response.id,
@@ -1847,7 +2004,12 @@ export class EngineerDashboardComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to fetch assignment result:', err);
-        if (err.status === 404) {
+        if (err.status === 401) {
+          // Silently redirect to login on token expiration
+          this.authService.logout();
+          this.router.navigate(['/login']);
+          return;
+        } else if (err.status === 404) {
           this.toastService.warning('You have not submitted this assignment yet. Please take the assignment first.');
         } else {
           this.toastService.error(`Failed to fetch results. Error: ${err.statusText || 'Unknown error'}`);
@@ -2100,9 +2262,8 @@ export class EngineerDashboardComponent implements OnInit {
       error: (err) => {
         console.error('Failed to fetch additional skills:', err);
         // Don't clear existing data on error - maintain consistency
-        // Only redirect if unauthorized (data will be refreshed on next login)
+        // Only redirect if unauthorized - silently redirect without showing error (data will be refreshed on next login)
         if (err.status === 401 || err.status === 403) {
-          console.warn('Authentication error in additional skills - redirecting to login');
           this.authService.logout();
           this.router.navigate(['/login']);
         }

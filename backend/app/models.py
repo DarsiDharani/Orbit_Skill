@@ -1,4 +1,27 @@
-# app/models.py
+"""
+SQLAlchemy Database Models
+
+Purpose: Define database schema using SQLAlchemy ORM
+Contains all table definitions and relationships for the Orbit Skill application
+
+Models:
+- User: User accounts with authentication
+- ManagerEmployee: Manager-employee relationships
+- EmployeeCompetency: Employee skill competencies and targets
+- AdditionalSkill: Self-reported additional skills
+- Trainer: Trainer information and expertise
+- TrainingDetail: Training session details
+- TrainingAssignment: Training assignments to employees
+- TrainingRequest: Training approval requests
+- AssignmentSubmission: Assignment exam submissions
+- FeedbackSubmission: Training feedback submissions
+- SharedAssignment: Shared assignments from trainers
+- SharedFeedback: Shared feedback forms from trainers
+- ManagerPerformanceFeedback: Manager feedback on employee performance
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from datetime import datetime, date
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Boolean, Text
@@ -7,6 +30,15 @@ from sqlalchemy.orm import relationship, declarative_base
 Base = declarative_base()
 
 class User(Base):
+    """
+    User model - Stores user account information and authentication data.
+    
+    Attributes:
+        id: Primary key
+        username: Unique employee ID (used for login)
+        hashed_password: Bcrypt hashed password
+        created_at: Account creation timestamp
+    """
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)

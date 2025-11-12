@@ -1,3 +1,22 @@
+"""
+Login Routes Module
+
+Purpose: User authentication endpoint
+Features:
+- User login with username and password
+- JWT token generation
+- Role detection (manager/employee)
+
+Endpoint:
+- POST /login: Authenticate user and return JWT token
+
+Note: This is an alternative login route implementation.
+The main login route is in app/auth.py
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select

@@ -556,7 +556,7 @@
                             <i class="fa-solid fa-comment-dots"></i>
                             {{ submission.has_feedback ? 'Update Feedback' : 'Provide Feedback' }}
                           </button>
-                          <button (click)="openFinalEvaluationFromCard(submission)" 
+                          <button *ngIf="submission.has_feedback" (click)="openFinalEvaluationFromCard(submission)" 
                                   class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold rounded-lg transition-all duration-200 flex items-center gap-1.5 shadow-sm">
                             <i class="fa-solid fa-trophy"></i>
                             Final Evaluation
@@ -2051,7 +2051,7 @@
       </div>
 
       <!-- Success Popup Modal -->
-      <div *ngIf="showSuccessPopup" @modalScale class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" (click)="closeSuccessPopup()">
+      <div *ngIf="showSuccessPopup" @modalScale class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" (click)="closeSuccessPopup()">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all" (click)="$event.stopPropagation()">
           <div class="flex items-center justify-center mb-4">
             <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -2176,18 +2176,71 @@
               <p class="text-slate-600">No skills found for this employee.</p>
             </div>
 
+            <!-- Manager Satisfaction Section -->
+            <div *ngIf="!isLoadingEmployeeSkills && employeeSkillsForEvaluation.length > 0" class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border-2 border-amber-200">
+              <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-clipboard-check text-amber-600"></i>
+                Manager Evaluation
+              </h3>
+              <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                  <input type="radio" 
+                         id="satisfied-option" 
+                         name="satisfaction" 
+                         [value]="true"
+                         (change)="isManagerSatisfied = true"
+                         [checked]="isManagerSatisfied === true"
+                         class="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500">
+                  <label for="satisfied-option" class="text-sm text-slate-700 cursor-pointer flex items-center gap-2">
+                    <i class="fa-solid fa-check-circle text-emerald-600"></i>
+                    <span>I am satisfied with the candidate's performance</span>
+                  </label>
+                </div>
+                <div class="flex items-center gap-3">
+                  <input type="radio" 
+                         id="not-satisfied-option" 
+                         name="satisfaction" 
+                         [value]="false"
+                         (change)="isManagerSatisfied = false"
+                         [checked]="isManagerSatisfied === false"
+                         class="w-4 h-4 text-amber-600 border-slate-300 focus:ring-amber-500">
+                  <label for="not-satisfied-option" class="text-sm text-slate-700 cursor-pointer flex items-center gap-2">
+                    <i class="fa-solid fa-times-circle text-amber-600"></i>
+                    <span>I am not satisfied - Reassign training</span>
+                  </label>
+                </div>
+                <div *ngIf="isManagerSatisfied === false" class="mt-3 bg-amber-100 border-l-4 border-amber-500 rounded p-3">
+                  <p class="text-xs text-amber-800 font-semibold mb-1">
+                    <i class="fa-solid fa-info-circle mr-1"></i>Action on Reassignment:
+                  </p>
+                  <p class="text-xs text-amber-700">
+                    The training will be reassigned to the employee, allowing them to retake it. No badges will be awarded.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- Action Buttons -->
             <div class="flex items-center gap-3 pt-4 border-t border-slate-200">
               <button (click)="closeFinalEvaluationModal()" 
                       class="flex-1 bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-300 transition-all duration-200">
                 <i class="fa-solid fa-times mr-2"></i>Cancel
               </button>
-              <button (click)="submitFinalEvaluation()" 
-                      [disabled]="isSubmittingEvaluation || getAchievedSkillsCount() === 0"
+              <button *ngIf="isManagerSatisfied !== false" 
+                      (click)="submitFinalEvaluation()" 
+                      [disabled]="isSubmittingEvaluation || getAchievedSkillsCount() === 0 || isManagerSatisfied === null"
                       class="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl">
                 <i *ngIf="!isSubmittingEvaluation" class="fa-solid fa-trophy mr-2"></i>
                 <i *ngIf="isSubmittingEvaluation" class="fa-solid fa-spinner fa-spin mr-2"></i>
                 {{ isSubmittingEvaluation ? 'Processing...' : 'Approve & Award Badges' }}
+              </button>
+              <button *ngIf="isManagerSatisfied === false" 
+                      (click)="reassignTraining()" 
+                      [disabled]="isReassigningTraining"
+                      class="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-amber-700 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl">
+                <i *ngIf="!isReassigningTraining" class="fa-solid fa-redo mr-2"></i>
+                <i *ngIf="isReassigningTraining" class="fa-solid fa-spinner fa-spin mr-2"></i>
+                {{ isReassigningTraining ? 'Reassigning...' : 'Reassign Training' }}
               </button>
             </div>
           </div>

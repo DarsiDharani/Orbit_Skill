@@ -1,4 +1,22 @@
-# backend/app/routes/training_requests.py
+"""
+Training Requests Routes Module
+
+Purpose: API routes for training request management (approval workflow)
+Features:
+- Employees can request training enrollment
+- Managers can approve/reject training requests
+- View pending requests (managers)
+- View user's own requests (employees)
+
+Endpoints:
+- POST /training-requests/: Create a training request
+- GET /training-requests/my: Get current user's training requests
+- GET /training-requests/pending: Get pending requests (manager only)
+- PATCH /training-requests/{id}/respond: Approve/reject request (manager only)
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

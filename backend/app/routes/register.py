@@ -1,3 +1,22 @@
+"""
+Register Routes Module
+
+Purpose: User registration endpoint
+Features:
+- Create new user account
+- Password hashing using pbkdf2_sha256
+- Username uniqueness validation
+
+Endpoint:
+- POST /register: Register a new user account
+
+Note: This is an alternative registration route implementation.
+The main registration route is in app/auth.py
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime

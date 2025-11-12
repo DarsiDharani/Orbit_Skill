@@ -1,18 +1,39 @@
-# app/schemas.py
+"""
+Pydantic Schemas Module
+
+Purpose: Define request/response data models using Pydantic for API validation
+Features:
+- Request validation for API endpoints
+- Response serialization
+- Type safety and automatic documentation
+- Data transformation between API and database models
+
+Schemas:
+- User schemas: Registration, login, and response models
+- Additional Skills: CRUD schemas for self-reported skills
+- Training: Training creation and response schemas
+- Training Requests: Request creation, update, and response schemas
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date
 from typing import Optional
 
 class UserRegister(BaseModel):
+    """Schema for user registration request"""
     emp_id: str
     password: str
 
 class UserLogin(BaseModel):
+    """Schema for user login request"""
     username: str
     password: str
 
 class UserResponse(BaseModel):
+    """Schema for user response data"""
     username: str
     name: Optional[str] = None
     
@@ -21,6 +42,7 @@ class UserResponse(BaseModel):
 
 # Additional Skills Schemas
 class AdditionalSkillBase(BaseModel):
+    """Base schema for additional skills with common fields"""
     skill_name: str
     skill_level: str
     skill_category: str

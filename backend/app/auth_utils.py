@@ -1,4 +1,26 @@
-# app/auth_utils.py
+"""
+Authentication Utilities Module (Alternative Implementation)
+
+Purpose: JWT token management, password hashing, and user authentication utilities
+Features:
+- JWT token creation with configurable expiration
+- Password hashing using pbkdf2_sha256 (supports passwords of any length)
+- Password verification supporting both bcrypt and pbkdf2_sha256
+- Current user extraction from JWT tokens
+- Manager role verification
+
+Security:
+- Uses pbkdf2_sha256 as primary hashing scheme (no 72-byte limit)
+- Falls back to bcrypt for backward compatibility
+- JWT tokens with configurable expiration
+- Secret key should be changed in production (use environment variable)
+
+Note: This is an alternative implementation to utils.py with enhanced password handling
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -11,17 +33,30 @@ from app.database import get_db_async
 from app.models import User
 
 # Configuration for JWT
+# TODO: Move SECRET_KEY to environment variable for production
 SECRET_KEY = "your-super-secret-key"  # CHANGE THIS!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Password hashing configuration - use pbkdf2_sha256 as primary (no 72-byte limit), bcrypt as fallback
+# Password hashing configuration
+# Use pbkdf2_sha256 as primary (no 72-byte limit like bcrypt), bcrypt as fallback
 # pbkdf2_sha256 is listed first to be the default, and bcrypt is kept for backward compatibility
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
+# OAuth2 password bearer scheme for token extraction
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Create a JWT access token with expiration.
+    
+    Args:
+        data: Dictionary containing token payload (typically username and role)
+        expires_delta: Optional custom expiration time (defaults to ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+    Returns:
+        str: Encoded JWT token string
+    """
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -62,6 +97,21 @@ def verify_password(plain_password: str, hashed_password: str):
         return False
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    Extract current user information from JWT token.
+    
+    This is a dependency function used in protected routes to get the authenticated user.
+    Validates the JWT token and extracts username and role.
+    
+    Args:
+        token: JWT token from Authorization header (extracted by oauth2_scheme)
+        
+    Returns:
+        dict: Dictionary containing 'username' and 'role'
+        
+    Raises:
+        HTTPException: 401 if token is missing, invalid, or expired
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -105,15 +155,37 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # We are returning the username and role as a dictionary,
-    # as this is a common pattern and allows for easy access.
+    # Return username and role as a dictionary for easy access
     return {"username": username, "role": role}
 
 async def get_current_active_user(user_data: dict = Depends(get_current_user)):
+    """
+    Get current active user (alias for get_current_user).
+    
+    Args:
+        user_data: User data from get_current_user dependency
+        
+    Returns:
+        dict: User data dictionary
+    """
     return user_data
 
-# This is the new function to get the current manager user
 async def get_current_active_manager(user_data: dict = Depends(get_current_user)):
+    """
+    Get current active manager user with role verification.
+    
+    Verifies that the current user has manager role, raises 403 if not.
+    Use this dependency in routes that require manager privileges.
+    
+    Args:
+        user_data: User data from get_current_user dependency
+        
+    Returns:
+        dict: User data dictionary (only if role is 'manager')
+        
+    Raises:
+        HTTPException: 403 if user is not a manager
+    """
     if user_data["role"] != "manager":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

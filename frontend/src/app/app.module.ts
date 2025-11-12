@@ -1,4 +1,18 @@
-﻿import { NgModule } from '@angular/core';
+﻿/**
+ * Angular Application Root Module
+ * 
+ * Purpose: Root module that bootstraps the Angular application
+ * Features:
+ * - Declares all application components, pipes, and directives
+ * - Imports required Angular modules (Forms, HTTP, Animations, etc.)
+ * - Configures application-wide providers
+ * - Bootstraps the root AppComponent
+ * 
+ * @author Orbit Skill Development Team
+ * @date 2025
+ */
+
+import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 import { BrowserModule } from '@angular/platform-browser';

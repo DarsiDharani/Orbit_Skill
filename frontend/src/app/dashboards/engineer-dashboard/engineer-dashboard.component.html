@@ -1,19 +1,60 @@
+<!--
+  ============================================================================
+  ENGINEER DASHBOARD COMPONENT TEMPLATE
+  ============================================================================
+  This template provides the main user interface for employees to:
+  - View their skill progress and competencies
+  - Browse and request training sessions
+  - View assigned trainings and complete assignments
+  - Submit feedback for completed trainings
+  - Manage additional skills
+  - Access trainer zone (if user is a trainer)
+  
+  Component Structure:
+  - Sidebar Navigation: Fixed left sidebar with tab navigation
+  - Main Content Area: Dynamic content based on activeTab selection
+  - Modals: Various modals for skills, assignments, feedback, etc.
+  
+  Angular Directives Used:
+  - *ngIf: Conditional rendering
+  - *ngFor: List iteration
+  - [(ngModel)]: Two-way data binding
+  - [ngClass]: Dynamic CSS classes
+  - @fadeIn, @slideFadeIn: Animation triggers
+  ============================================================================
+-->
 
-
+<!-- Main Container: Full-screen flex layout with sidebar and content area -->
 <div class="flex h-screen bg-slate-100 font-sans text-slate-800">
+    <!-- 
+      SIDEBAR NAVIGATION
+      Purpose: Fixed left sidebar providing navigation between different dashboard sections
+      Features:
+      - User profile display with employee name and ID
+      - Navigation buttons for each dashboard tab
+      - Active tab highlighting with visual indicators
+      - Conditional trainer zone tab (only shown if user is a trainer)
+    -->
     <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-2xl z-20 overflow-hidden">
+        <!-- User Profile Section: Displays employee information at the top of sidebar -->
         <div class="px-6 py-4 text-center border-b border-slate-700/50">
             <div class="relative inline-block mb-4">
+                <!-- User Avatar: Circular icon representing the employee -->
                 <div class="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center shadow-lg ring-4 ring-slate-800">
                     <i class="fa-solid fa-user text-slate-400 text-3xl"></i>
                 </div>
+                <!-- Online Status Indicator: Green dot showing user is active -->
                 <div class="absolute top-0 right-0 w-6 h-6 bg-green-400 rounded-full border-4 border-slate-900"></div>
             </div>
+            <!-- Employee Name: Displayed from component property -->
             <h3 class="text-white text-xl font-semibold">{{ employeeName }}</h3>
+            <!-- Employee ID: Displayed in smaller text below name -->
             <p class="text-slate-400 text-sm mt-1">({{ employeeId }})</p>
         </div>
 
+        <!-- Navigation Menu: List of dashboard tabs with icons and labels -->
         <nav class="flex-1 px-4 py-3 space-y-1 pb-4">
+            <!-- Dashboard Tab: Main overview showing skill progress and statistics -->
             <button (click)="selectTab('dashboard')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'dashboard',
@@ -25,6 +66,7 @@
                 <span class="font-medium">Dashboard</span>
             </button>
 
+            <!-- My Skills Tab: View core skills and additional skills with filtering options -->
             <button (click)="selectTab('mySkills')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'mySkills',
@@ -36,6 +78,7 @@
                 <span class="font-medium">My Skills</span>
             </button>
 
+            <!-- Training Catalog Tab: Browse all available training sessions and request enrollment -->
             <button (click)="selectTab('trainingCatalog')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'trainingCatalog',
@@ -47,6 +90,7 @@
                 <span class="font-medium">Training Catalog</span>
             </button>
 
+            <!-- Assigned Trainings Tab: View trainings assigned to the employee and complete assignments/feedback -->
             <button (click)="selectTab('assignedTrainings')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'assignedTrainings',
@@ -58,6 +102,7 @@
                 <span class="font-medium">Assigned Trainings</span>
             </button>
 
+            <!-- My Requests Tab: Track training enrollment requests and their approval status -->
             <button (click)="selectTab('myRequests')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'myRequests',
@@ -69,6 +114,7 @@
                 <span class="font-medium">My Requests</span>
             </button>
 
+            <!-- My Badges Tab: Display earned skill badges and achievements -->
             <button (click)="selectTab('myBadges')"
                 class="w-full text-left px-4 py-2 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'myBadges',
@@ -80,6 +126,7 @@
                 <span class="font-medium">My Badges</span>
             </button>
 
+            <!-- Levels Tab: View skill level definitions and competency requirements -->
             <button (click)="selectTab('levels')"
                 class="w-full text-left px-4 py-3 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'levels',
@@ -91,6 +138,8 @@
                 <span class="font-medium">Levels</span>
             </button>
 
+            <!-- Trainer Zone Tab: Only visible if user is a trainer (isTrainer flag or has scheduled trainings)
+                 Allows trainers to schedule trainings, create assignments, and share feedback forms -->
             <button *ngIf="shouldShowTrainerZone" (click)="selectTab('trainerZone')"
                 class="w-full text-left px-4 py-3 rounded-lg flex items-center gap-4 transition-all duration-200" [ngClass]="{
         'bg-slate-800/80 text-white border-l-4 border-sky-400 px-3': activeTab === 'trainerZone',
@@ -105,50 +154,73 @@
 
         </aside>
 
+    <!-- Main Content Area: Flexible container that adapts based on active tab -->
     <div class="flex-1 flex flex-col">
 
-<div *ngIf="activeTab === 'mySkills' || activeTab === 'trainingCatalog' || activeTab === 'assignedTrainings' || activeTab === 'myRequests' || activeTab === 'trainerZone'" class="bg-blue-600 px-6 py-3 shadow-lg rounded-2xl mx-6 mt-4">
-    <div *ngIf="activeTab === 'mySkills'" @fadeIn>
-        <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-4">
-                <div class="inline-flex rounded-lg shadow-sm bg-blue-700 p-1">
-                    <button (click)="mySkillsView = 'core'" class="px-3 py-1 text-xs rounded-md transition-colors duration-200" [ngClass]="{'bg-green-300 text-green-800 font-bold shadow': mySkillsView === 'core', 'text-blue-200 hover:bg-blue-500 font-semibold': mySkillsView !== 'core'}">
-                        <i class="fa-solid fa-briefcase mr-1.5"></i>Core Skills
-                    </button>
-                    <button (click)="mySkillsView = 'additional'" class="px-3 py-1 text-xs rounded-md transition-colors duration-200" [ngClass]="{'bg-green-300 text-green-800 font-bold shadow': mySkillsView === 'additional', 'text-blue-200 hover:bg-blue-500 font-semibold': mySkillsView !== 'additional'}">
-                        <i class="fa-solid fa-star mr-1.5"></i>Additional Skills
-                    </button>
+    <!-- 
+      FILTER BAR SECTION
+      Purpose: Provides filtering and view controls for various tabs
+      Displayed for: mySkills, trainingCatalog, assignedTrainings, myRequests, trainerZone tabs
+      Features:
+      - Tab-specific filter controls
+      - Search functionality
+      - View toggles (list/calendar)
+      - Status filters
+    -->
+    <div *ngIf="activeTab === 'mySkills' || activeTab === 'trainingCatalog' || activeTab === 'assignedTrainings' || activeTab === 'myRequests' || activeTab === 'trainerZone'" class="bg-blue-600 px-6 py-3 shadow-lg rounded-2xl mx-6 mt-4">
+        <!-- My Skills Filter Bar: Toggle between core skills and additional skills views -->
+        <div *ngIf="activeTab === 'mySkills'" @fadeIn>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-4">
+                    <!-- View Toggle: Switch between Core Skills and Additional Skills -->
+                    <div class="inline-flex rounded-lg shadow-sm bg-blue-700 p-1">
+                        <!-- Core Skills Button: Shows job-required skills from API -->
+                        <button (click)="mySkillsView = 'core'" class="px-3 py-1 text-xs rounded-md transition-colors duration-200" [ngClass]="{'bg-green-300 text-green-800 font-bold shadow': mySkillsView === 'core', 'text-blue-200 hover:bg-blue-500 font-semibold': mySkillsView !== 'core'}">
+                            <i class="fa-solid fa-briefcase mr-1.5"></i>Core Skills
+                        </button>
+                        <!-- Additional Skills Button: Shows self-reported skills -->
+                        <button (click)="mySkillsView = 'additional'" class="px-3 py-1 text-xs rounded-md transition-colors duration-200" [ngClass]="{'bg-green-300 text-green-800 font-bold shadow': mySkillsView === 'additional', 'text-blue-200 hover:bg-blue-500 font-semibold': mySkillsView !== 'additional'}">
+                            <i class="fa-solid fa-star mr-1.5"></i>Additional Skills
+                        </button>
+                    </div>
+                </div>
+                <!-- Filter Controls: Search and filter options based on current view -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <!-- Core Skills Filters: Search, skill name filter, and status filter -->
+                    <ng-container *ngIf="mySkillsView === 'core'">
+                        <!-- Search Input: Filter skills by text search -->
+                        <div class="relative">
+                            <i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" [(ngModel)]="skillSearch" placeholder="Search..." class="w-full sm:w-36 pl-8 pr-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white transition-all duration-300 focus:w-48 text-sm">
+                        </div>
+                        <!-- Skill Name Filter: Dropdown to filter by specific skill name -->
+                        <select [(ngModel)]="skillNameFilter" class="w-full sm:w-auto appearance-none px-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white cursor-pointer text-sm">
+                            <option value="">All Skills</option>
+                            <option *ngFor="let name of skillNames" [value]="name">{{ name }}</option>
+                        </select>
+                        <!-- Status Filter: Filter by skill status (Met, Gap, Error) -->
+                        <select [(ngModel)]="skillStatusFilter" class="w-full sm:w-auto appearance-none px-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white cursor-pointer text-sm">
+                            <option value="">All Statuses</option>
+                            <option value="Met">Met</option>
+                            <option value="Gap">Gap</option>
+                            <option value="Error">Error</option>
+                        </select>
+                        <!-- Reset Filters Button: Clear all filter selections -->
+                        <button (click)="resetSkillFilters()" title="Reset Filters" class="w-7 h-7 flex items-center justify-center text-blue-200 hover:text-white hover:bg-blue-500 rounded-md transition-colors">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </button>
+                    </ng-container>
+                    <!-- Additional Skills Controls: Add new skill button -->
+                    <ng-container *ngIf="mySkillsView === 'additional'">
+                        <!-- Toggle Add Skill Form: Show/hide form to add new additional skill -->
+                        <button (click)="toggleAddSkillForm()" class="bg-white/20 hover:bg-white/30 text-white rounded-md px-3 py-1 text-sm font-medium transition-all duration-200 flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-plus transition-transform duration-300" [ngClass]="{'rotate-45': showAddSkillForm}"></i>
+                            <span>{{ showAddSkillForm ? 'Cancel' : 'Add Skill' }}</span>
+                        </button>
+                    </ng-container>
                 </div>
             </div>
-            <div class="flex flex-wrap items-center gap-1.5">
-                <ng-container *ngIf="mySkillsView === 'core'">
-                    <div class="relative">
-                        <i class="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" [(ngModel)]="skillSearch" placeholder="Search..." class="w-full sm:w-36 pl-8 pr-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white transition-all duration-300 focus:w-48 text-sm">
-                    </div>
-                    <select [(ngModel)]="skillNameFilter" class="w-full sm:w-auto appearance-none px-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white cursor-pointer text-sm">
-                        <option value="">All Skills</option>
-                        <option *ngFor="let name of skillNames" [value]="name">{{ name }}</option>
-                    </select>
-                    <select [(ngModel)]="skillStatusFilter" class="w-full sm:w-auto appearance-none px-3 py-1 rounded-md border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white cursor-pointer text-sm">
-                        <option value="">All Statuses</option>
-                        <option value="Met">Met</option>
-                        <option value="Gap">Gap</option>
-                        <option value="Error">Error</option>
-                    </select>
-                    <button (click)="resetSkillFilters()" title="Reset Filters" class="w-7 h-7 flex items-center justify-center text-blue-200 hover:text-white hover:bg-blue-500 rounded-md transition-colors">
-                        <i class="fa-solid fa-rotate-right"></i>
-                    </button>
-                </ng-container>
-                <ng-container *ngIf="mySkillsView === 'additional'">
-                    <button (click)="toggleAddSkillForm()" class="bg-white/20 hover:bg-white/30 text-white rounded-md px-3 py-1 text-sm font-medium transition-all duration-200 flex items-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-plus transition-transform duration-300" [ngClass]="{'rotate-45': showAddSkillForm}"></i>
-                        <span>{{ showAddSkillForm ? 'Cancel' : 'Add Skill' }}</span>
-                    </button>
-                </ng-container>
-            </div>
         </div>
-    </div>
     <div *ngIf="activeTab === 'trainingCatalog'" @fadeIn>
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-4">
@@ -777,54 +849,120 @@
                     </div>
                 </div>
 
+                <!-- 
+                  ASSIGNED TRAININGS TAB CONTENT
+                  Purpose: Displays trainings that have been assigned to the employee by their manager
+                  Features:
+                  - List view: Grid layout showing training cards with details and action buttons
+                  - Calendar view: Monthly calendar view showing assigned trainings on their scheduled dates
+                  - Action buttons: Take assignment, view results, give feedback (conditional based on submission status)
+                  - Status badges: Visual indicators for upcoming/today/past trainings
+                  - Empty state: Friendly message when no assigned trainings are available
+                -->
                 <div *ngIf="activeTab === 'assignedTrainings'" @slideFadeIn class="space-y-4">
+                    <!-- 
+                      LIST VIEW SECTION
+                      Purpose: Grid-based card layout for browsing assigned trainings
+                      Display: Responsive grid (1 column mobile, 2 columns large, 3 columns extra-large)
+                      Animation: Staggered list animation for smooth card appearance
+                    -->
                     <div *ngIf="assignedTrainingsView === 'list'">
+                        <!-- 
+                          TRAINING CARDS GRID
+                          Condition: Only displays if filteredAssignedTrainings has items, otherwise shows empty state template
+                          Animation: listStagger animation applied with training count for stagger timing
+                        -->
                         <div *ngIf="filteredAssignedTrainings && filteredAssignedTrainings.length > 0; else noAssigned" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4" [@listStagger]="filteredAssignedTrainings.length">
+                            <!-- 
+                              TRAINING CARD
+                              Purpose: Individual card displaying training information and action buttons
+                              Features:
+                              - Training icon based on skill type
+                              - Training name and trainer information
+                              - Status badge for upcoming/today trainings
+                              - Date and time display with fallback to "TBD" if not available
+                              - Training metadata (type, skill category, skill name)
+                              - Action buttons for assignments and feedback (conditional rendering)
+                            -->
                             <div *ngFor="let t of filteredAssignedTrainings"
                                 class="bg-white/70 backdrop-blur-sm p-2.5 rounded-2xl shadow-lg border border-slate-200/60 transform hover:-translate-y-1 transition-all duration-300 hover:shadow-xl flex flex-col gap-2">
+                                <!-- Card Header: Training icon, name, trainer, and status badge -->
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-start gap-2">
+                                        <!-- Training Icon: Dynamic icon based on skill type (Python, C++, Git, etc.) -->
                                         <div class="w-9 h-9 bg-sky-100 text-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
                                             <i [ngClass]="getTrainingCardIcon(t.skill)" class="text-lg"></i>
                                         </div>
+                                        <!-- Training Information: Name and trainer details -->
                                         <div>
                                             <h3 class="text-xs font-bold text-slate-800">{{ t.training_name }}</h3>
                                             <p class="text-[10px] text-slate-500">by {{ t.trainer_name }}</p>
                                         </div>
                                     </div>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200">
-                                        <i class="fa-solid fa-clock mr-1"></i> Upcoming
+                                    <!-- Status Badge: Only shown for upcoming or today trainings
+                                         Uses getTrainingStatus() method to determine status and getTrainingStatusBadge() for styling -->
+                                    <span *ngIf="getTrainingStatus(t) === 'upcoming' || getTrainingStatus(t) === 'today'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ring-inset" [ngClass]="getTrainingStatusBadge(getTrainingStatus(t)).class">
+                                        <i [ngClass]="'fa-solid ' + getTrainingStatusBadge(getTrainingStatus(t)).icon" class="mr-1"></i>
+                                        {{ getTrainingStatusBadge(getTrainingStatus(t)).text }}
                                     </span>
                                 </div>
+                                <!-- Divider: Visual separation between header and content -->
                                 <div class="border-t border-slate-200/80"></div>
+                                <!-- Date and Time Section: Displays training schedule information -->
                                 <div class="flex items-center justify-between text-xs">
+                                    <!-- Training Date: Formatted date with fallback to "Date TBD" if not available -->
                                     <div class="flex items-center gap-1.5 text-slate-600">
                                         <i class="fa-solid fa-calendar-days text-slate-400"></i>
                                         <span class="font-semibold text-slate-800">{{ t.training_date ? (t.training_date | date:'fullDate') : 'Date TBD' }}</span>
                                     </div>
+                                    <!-- Training Time: Time display with fallback to "Time TBD" if not available -->
                                     <div class="flex items-center gap-1.5 text-slate-600">
                                         <i class="fa-solid fa-clock text-slate-400"></i>
                                         <span class="font-semibold text-slate-800">{{ t.time || 'Time TBD' }}</span>
                                     </div>
                                 </div>
+                                <!-- Training Metadata Tags: Type, skill category, and skill name badges -->
                                 <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                                    <!-- Training Type Badge: Online/Offline/Hybrid (always shown) -->
                                     <span class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-display mr-1"></i>{{ t.training_type || 'N/A' }}</span>
+                                    <!-- Skill Category Badge: L1, L2, L3, L4, L5 (conditionally shown if available) -->
                                     <span *ngIf="t.skill_category" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-layer-group mr-1"></i>{{ t.skill_category }}</span>
+                                    <!-- Skill Name Badge: Specific skill name (conditionally shown if available) -->
                                     <span *ngIf="t.skill" class="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><i class="fa-solid fa-code mr-1"></i>{{ t.skill }}</span>
                                 </div>
+                                <!-- 
+                                  ACTION BUTTONS SECTION
+                                  Purpose: Provides actions for assignments and feedback
+                                  Logic:
+                                  - Take Assignment: Shown only if assignment not yet submitted (checked via isAssignmentSubmitted())
+                                  - Assignment Submitted: Disabled button shown if assignment already submitted
+                                  - View Results: Shown only if assignment submitted, navigates to results view
+                                  - Give Feedback: Shown only if feedback not yet submitted (checked via isFeedbackSubmitted())
+                                  - Feedback Submitted: Disabled button shown if feedback already submitted
+                                -->
                                  <div class="mt-auto pt-2 border-t border-slate-200/80 flex items-center gap-2">
+                                    <!-- Take Assignment Button: Opens exam modal to complete assignment
+                                         Only visible if assignment has not been submitted for this training -->
                                     <button *ngIf="!isAssignmentSubmitted(t.id)" (click)="takeExam(t)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-file-lines mr-1.5"></i>Take Assignment
                                     </button>
+                                    <!-- Assignment Submitted Button: Disabled state indicating assignment completion
+                                         Only visible if assignment has been submitted -->
                                     <button *ngIf="isAssignmentSubmitted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-check-circle mr-1.5"></i>Assignment Submitted
                                     </button>
+                                    <!-- View Results Button: Displays assignment score and question-by-question results
+                                         Only visible if assignment has been submitted -->
                                     <button *ngIf="isAssignmentSubmitted(t.id)" (click)="viewAssignmentResult(t)" class="flex-1 bg-blue-600 text-white font-semibold py-1 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-chart-line mr-1.5"></i>View Results
                                     </button>
+                                    <!-- Give Feedback Button: Opens feedback modal to submit training feedback
+                                         Only visible if feedback has not been submitted for this training -->
                                     <button *ngIf="!isFeedbackSubmitted(t.id)" (click)="giveFeedback(t)" class="flex-1 bg-green-500 text-white font-semibold py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-comment-dots mr-1.5"></i>Give Feedback
                                     </button>
+                                    <!-- Feedback Submitted Button: Disabled state indicating feedback completion
+                                         Only visible if feedback has been submitted -->
                                     <button *ngIf="isFeedbackSubmitted(t.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
                                         <i class="fa-solid fa-check-circle mr-1.5"></i>Feedback Submitted
                                     </button>
@@ -832,6 +970,12 @@
                             </div>
                         </div>
                         
+                        <!-- 
+                          EMPTY STATE TEMPLATE
+                          Purpose: Displays friendly message when no assigned trainings are available
+                          Triggered: When filteredAssignedTrainings is empty or null
+                          Design: Centered layout with icon, heading, and descriptive text
+                        -->
                         <ng-template #noAssigned>
                             <div class="text-center py-20 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-dashed border-slate-300">
                                 <div class="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -843,18 +987,35 @@
                         </ng-template>
                     </div>
 
+                    <!-- 
+                      CALENDAR VIEW SECTION
+                      Purpose: Monthly calendar display showing assigned trainings on their scheduled dates
+                      Features:
+                      - Month navigation (previous/next buttons)
+                      - Current month and year display
+                      - Day cells with date numbers
+                      - Training events displayed on their scheduled dates
+                      - Today highlighting with sky-50 background
+                      - Hover effects on training events
+                    -->
                     <div *ngIf="assignedTrainingsView === 'calendar'" @fadeIn>
                         <div class="bg-white/80 backdrop-blur-sm p-4 sm:p-6 rounded-2xl shadow-lg border border-slate-200/60">
+                            <!-- Calendar Header: Month navigation controls and current month/year display -->
                             <div class="flex justify-between items-center mb-6">
+                                <!-- Previous Month Button: Navigates to previous month -->
                                 <button (click)="previousMonth()" class="w-10 h-10 bg-slate-200/70 rounded-lg hover:bg-slate-300/80 transition-colors flex items-center justify-center">
                                     <i class="fa-solid fa-chevron-left"></i>
                                 </button>
+                                <!-- Current Month/Year Display: Shows the calendar month and year -->
                                 <h3 class="text-2xl font-bold text-slate-800">{{ calendarMonth }} {{ calendarYear }}</h3>
+                                <!-- Next Month Button: Navigates to next month -->
                                 <button (click)="nextMonth()" class="w-10 h-10 bg-slate-200/70 rounded-lg hover:bg-slate-300/80 transition-colors flex items-center justify-center">
                                     <i class="fa-solid fa-chevron-right"></i>
                                 </button>
                             </div>
+                            <!-- Calendar Grid: 7-column grid for days of the week -->
                             <div class="grid grid-cols-7 gap-1 sm:gap-2 text-center">
+                                <!-- Day Headers: Column labels for each day of the week -->
                                 <div class="font-bold text-slate-500 py-2 text-xs sm:text-sm">SUN</div>
                                 <div class="font-bold text-slate-500 py-2 text-xs sm:text-sm">MON</div>
                                 <div class="font-bold text-slate-500 py-2 text-xs sm:text-sm">TUE</div>
@@ -863,6 +1024,15 @@
                                 <div class="font-bold text-slate-500 py-2 text-xs sm:text-sm">FRI</div>
                                 <div class="font-bold text-slate-500 py-2 text-xs sm:text-sm">SAT</div>
     
+                                <!-- 
+                                  CALENDAR DAY CELLS
+                                  Purpose: Individual day cells in the calendar grid
+                                  Features:
+                                  - Dynamic background based on day state (today, current month, other month)
+                                  - Date number display
+                                  - Training event display if training exists on that date
+                                  - Conditional styling for today highlighting
+                                -->
                                 <div *ngFor="let day of calendarDays" class="relative h-20 font-semibold rounded-lg transition-colors border border-slate-200/60"
                                      [ngClass]="{
                                        'bg-sky-50': isToday(day),
@@ -870,10 +1040,15 @@
                                        'bg-slate-50/50': !day,
                                        'text-slate-400': !day || day.getMonth() !== currentDate.getMonth()
                                      }">
+                                    <!-- Date Number: Displays the day number (1-31)
+                                         Styled differently for today (sky-500 background) vs other days -->
                                     <div *ngIf="day" class="absolute top-1.5 left-2 text-xs sm:text-sm w-6 h-6 flex items-center justify-center rounded-full"
                                         [ngClass]="{'bg-sky-500 text-white': isToday(day), 'text-slate-800': !isToday(day)}">
                                        {{ day.getDate() }}
                                    </div>
+                                    <!-- Training Event Display: Shows training name if training exists on this date
+                                         Uses getEventForDate() to find matching training from assignedTrainingsCalendarEvents
+                                         Styled with rose colors to differentiate from training catalog calendar -->
                                     <div *ngIf="getEventForDate(day, assignedTrainingsCalendarEvents) as event"
                                         class="absolute top-9 left-1 right-1 p-1 text-[10px] bg-rose-100 text-rose-900 rounded cursor-pointer leading-tight shadow-sm hover:bg-rose-200 hover:ring-2 hover:ring-rose-400 z-10 transition-all duration-200"
                                         [title]="event.title + ' - by ' + event.trainer">

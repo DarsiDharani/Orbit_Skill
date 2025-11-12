@@ -1,3 +1,22 @@
+"""
+Dashboard Routes Module
+
+Purpose: API routes for engineer and manager dashboard data
+Features:
+- Engineer dashboard data endpoint
+- Manager dashboard data endpoint (with team information)
+- Skill update functionality for managers
+- Additional skills management
+
+Endpoints:
+- GET /data/engineer: Get engineer dashboard data
+- GET /data/manager/dashboard: Get manager dashboard data
+- PATCH /data/manager/team-skill: Update team member skill levels
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -13,6 +32,7 @@ router = APIRouter(prefix="/data", tags=["Dashboard"])
 
 # Pydantic models for API requests
 class SkillUpdateRequest(BaseModel):
+    """Request schema for updating team member skill levels"""
     employee_username: str
     skill_name: str
     current_expertise: str
@@ -22,7 +42,16 @@ class SkillUpdateRequest(BaseModel):
 def get_status_from_levels(current_level_str: str, target_level_str: str) -> str:
     """
     Compares two level strings (e.g., 'L0', 'L2' or 'Beginner', 'Expert') to determine competency status.
-    Returns 'Met', 'Gap', or 'Error'.
+    
+    Supports both L-format (L1-L5) and text format (Beginner, Intermediate, Advanced, Expert).
+    Returns 'Met' if current >= target, 'Gap' if current < target, 'Error' if invalid.
+    
+    Args:
+        current_level_str: Current expertise level
+        target_level_str: Target expertise level
+        
+    Returns:
+        str: 'Met', 'Gap', or 'Error'
     """
     # Check for None values and return 'Error' immediately
     if current_level_str is None or target_level_str is None:

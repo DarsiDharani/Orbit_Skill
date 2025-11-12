@@ -1,3 +1,59 @@
+/**
+ * Manager Dashboard Component
+ * 
+ * Purpose: Main dashboard for managers to manage team skills, assign trainings, and track performance
+ * 
+ * Features:
+ * - Team Management:
+ *   - View personal skills and team member skills
+ *   - Track team skill gaps and progress
+ *   - Edit team member skill levels
+ *   - View team competency matrices
+ * 
+ * - Training Management:
+ *   - Assign trainings to team members (bulk assignment support)
+ *   - View all available trainings
+ *   - Manage training requests from team members (approve/reject)
+ *   - View training calendar
+ * 
+ * - Performance Tracking:
+ *   - View team assignment submissions and scores
+ *   - View team feedback submissions
+ *   - Provide performance feedback to team members
+ *   - Track team training completion rates
+ * 
+ * - Dashboard Metrics:
+ *   - Team size and skill statistics
+ *   - Top skill gaps across team
+ *   - Assigned trainings count
+ *   - Personal vs. team view toggle
+ * 
+ * Key Sections:
+ * 1. Dashboard Tab: Overview with metrics and team statistics
+ * 2. My Skills Tab: Manager's personal skills (core and additional)
+ * 3. Team Skills Tab: View and manage team member skills
+ * 4. Training Catalog Tab: Browse all available trainings
+ * 5. Assign Training Tab: Assign trainings to team members
+ * 6. Training Requests Tab: Approve/reject team member training requests
+ * 7. Team Assignments Tab: View team assignment submissions
+ * 8. Team Feedback Tab: View team feedback submissions
+ * 9. Performance Feedback Tab: Provide feedback to team members
+ * 
+ * State Management:
+ * - Manages selected trainings and team members for bulk operations
+ * - Tracks duplicate assignments to prevent conflicts
+ * - Uses filters for various views
+ * 
+ * API Integration:
+ * - Uses ApiService for centralized endpoint management
+ * - Implements proper error handling with ToastService
+ * - Handles authentication via AuthService
+ * - Uses forkJoin for parallel API calls
+ * 
+ * @author Orbit Skill Development Team
+ * @date 2025
+ */
+
 import { Component, OnInit, ElementRef, QueryList, AfterViewInit, ViewChildren } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -343,6 +399,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   }> = [];
   isLoadingEmployeeSkills: boolean = false;
   isSubmittingEvaluation: boolean = false;
+  isManagerSatisfied: boolean | null = null;
+  isReassigningTraining: boolean = false;
 
   private readonly API_ENDPOINT = '/data/manager/dashboard';
 
@@ -813,6 +871,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.showFinalEvaluationModal = true;
     this.isLoadingEmployeeSkills = true;
     this.employeeSkillsForEvaluation = [];
+    this.isManagerSatisfied = null; // Reset satisfaction status
     
     const employeeEmpid = this.selectedSubmissionForFeedback.submission.employee_empid;
     
@@ -868,6 +927,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   closeFinalEvaluationModal(): void {
     this.showFinalEvaluationModal = false;
     this.employeeSkillsForEvaluation = [];
+    this.isManagerSatisfied = null; // Reset satisfaction status
   }
 
   // Get count of achieved skills
@@ -878,6 +938,18 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   // Submit final evaluation
   submitFinalEvaluation(): void {
     if (!this.selectedSubmissionForFeedback) return;
+    
+    // Check if manager is satisfied
+    if (this.isManagerSatisfied === null) {
+      this.toastService.warning('Please indicate whether you are satisfied with the candidate\'s performance');
+      return;
+    }
+    
+    if (this.isManagerSatisfied === false) {
+      // Should not reach here if UI is correct, but handle it anyway
+      this.reassignTraining();
+      return;
+    }
     
     const achievedSkills = this.employeeSkillsForEvaluation.filter(skill => skill.targetAchieved);
     if (achievedSkills.length === 0) {
@@ -937,6 +1009,110 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         this.toastService.error('You can only update skills for employees in your team.');
       } else {
         this.toastService.error(`Failed to submit final evaluation. Error: ${err.statusText || 'Unknown error'}`);
+      }
+    });
+  }
+
+  // Reassign training when manager is not satisfied
+  reassignTraining(): void {
+    if (!this.selectedSubmissionForFeedback) return;
+    
+    const trainingId = this.selectedSubmissionForFeedback.submission.training_id;
+    const employeeEmpid = this.selectedSubmissionForFeedback.submission.employee_empid;
+    const trainingName = this.selectedSubmissionForFeedback.submission.training_name;
+    const employeeName = this.selectedSubmissionForFeedback.submission.employee_name;
+    
+    if (!trainingId || !employeeEmpid) {
+      this.toastService.error('Missing training or employee information');
+      return;
+    }
+    
+    this.isReassigningTraining = true;
+    
+    const token = this.authService.getToken();
+    if (!token) {
+      this.isReassigningTraining = false;
+      this.toastService.error('Authentication token missing. Please login again.');
+      return;
+    }
+    
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    // First, delete the existing assignment
+    this.http.delete(this.apiService.getUrl(`/assignments/${trainingId}/${employeeEmpid}`), { headers }).subscribe({
+      next: () => {
+        // After deletion, recreate the assignment
+        const payload = { 
+          training_id: trainingId, 
+          employee_username: employeeEmpid 
+        };
+        
+        this.http.post(this.apiService.assignmentsUrl, payload, { headers }).subscribe({
+          next: () => {
+            this.isReassigningTraining = false;
+            
+            // Show success message
+            this.successPopupMessage = `Training "${trainingName}" has been reassigned to ${employeeName}. They can now retake the training.`;
+            this.showSuccessPopup = true;
+            
+            // Auto-close popup after 4 seconds
+            setTimeout(() => {
+              if (this.showSuccessPopup) {
+                this.closeSuccessPopup();
+              }
+            }, 4000);
+            
+            // Close evaluation modal
+            this.closeFinalEvaluationModal();
+            
+            // Refresh team data to reflect changes
+            this.fetchDashboardData();
+            this.fetchTeamAssignedTrainings();
+            this.fetchTeamSubmissions();
+            
+            this.toastService.success(`Training reassigned successfully to ${employeeName}`);
+          },
+          error: (err) => {
+            this.isReassigningTraining = false;
+            console.error('Failed to recreate assignment:', err);
+            this.toastService.error(`Failed to reassign training. Error: ${err.statusText || 'Unknown error'}`);
+          }
+        });
+      },
+      error: (err) => {
+        this.isReassigningTraining = false;
+        console.error('Failed to delete assignment:', err);
+        if (err.status === 404) {
+          // Assignment might not exist, try to create it anyway
+          const payload = { 
+            training_id: trainingId, 
+            employee_username: employeeEmpid 
+          };
+          
+          this.http.post(this.apiService.assignmentsUrl, payload, { headers }).subscribe({
+            next: () => {
+              this.isReassigningTraining = false;
+              this.successPopupMessage = `Training "${trainingName}" has been reassigned to ${employeeName}.`;
+              this.showSuccessPopup = true;
+              setTimeout(() => {
+                if (this.showSuccessPopup) {
+                  this.closeSuccessPopup();
+                }
+              }, 4000);
+              this.closeFinalEvaluationModal();
+              this.fetchDashboardData();
+              this.fetchTeamAssignedTrainings();
+              this.fetchTeamSubmissions();
+              this.toastService.success(`Training reassigned successfully to ${employeeName}`);
+            },
+            error: (createErr) => {
+              this.isReassigningTraining = false;
+              this.toastService.error(`Failed to reassign training. Error: ${createErr.statusText || 'Unknown error'}`);
+            }
+          });
+        } else {
+          this.toastService.error(`Failed to delete assignment. Error: ${err.statusText || 'Unknown error'}`);
+        }
       }
     });
   }
@@ -1022,21 +1198,24 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
           true
         );
         
-        // Show success popup
-        this.successPopupMessage = isUpdate 
-          ? 'Feedback updated successfully! The employee will see the updated feedback.'
-          : 'Feedback submitted successfully! The employee will be notified.';
-        this.showSuccessPopup = true;
-        
-        // Auto-close popup after 4 seconds
-        setTimeout(() => {
-          if (this.showSuccessPopup) {
-            this.closeSuccessPopup();
-          }
-        }, 4000);
-        
-        // Close feedback modal
+        // Close feedback modal first
         this.closeFeedbackModal();
+        
+        // Show success popup after a brief delay to ensure modal is closed
+        setTimeout(() => {
+          this.successPopupMessage = isUpdate 
+            ? 'Feedback updated successfully! The employee will see the updated feedback.'
+            : 'Feedback submitted successfully! The employee will be notified.';
+          this.showSuccessPopup = true;
+          console.log('Success popup should be visible now:', this.showSuccessPopup, this.successPopupMessage);
+          
+          // Auto-close popup after 4 seconds
+          setTimeout(() => {
+            if (this.showSuccessPopup) {
+              this.closeSuccessPopup();
+            }
+          }, 4000);
+        }, 300);
         
         // Refresh team submissions to update status from backend
         this.fetchTeamSubmissions();

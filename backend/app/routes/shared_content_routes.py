@@ -1,4 +1,27 @@
-# app/routes/shared_content_routes.py
+"""
+Shared Content Routes Module
+
+Purpose: API routes for shared assignments, feedback, and performance tracking
+Features:
+- Trainers can share assignments and feedback forms
+- Employees can take shared assignments and submit feedback
+- Managers can view team submissions and provide performance feedback
+- Assignment scoring and result tracking
+
+Endpoints:
+- POST /shared-content/assignments: Share an assignment (trainer)
+- GET /shared-content/assignments/{trainingId}: Get shared assignment
+- POST /shared-content/assignments/submit: Submit assignment answers
+- GET /shared-content/assignments/{trainingId}/result: Get assignment results
+- POST /shared-content/feedback: Share a feedback form (trainer)
+- POST /shared-content/feedback/submit: Submit feedback
+- GET /shared-content/manager/team/assignments: Get team assignment submissions
+- GET /shared-content/manager/team/feedback: Get team feedback submissions
+- POST /shared-content/manager/performance-feedback: Provide performance feedback
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1130,6 +1153,68 @@ async def submit_feedback(
         submitted_at=submission.submitted_at
     )
 
+@router.get("/feedback/{training_id}/result", response_model=Optional[FeedbackSubmissionResponse])
+async def get_feedback_submission_result(
+    training_id: int,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Allows engineers to check if they have submitted feedback for a training.
+    Returns the feedback submission if it exists, None otherwise.
+    """
+    employee_username = current_user.get("username")
+    if not employee_username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+    # Verify the training is assigned to this employee
+    assignment_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.training_id == training_id,
+        models.TrainingAssignment.employee_empid == employee_username
+    )
+    assignment_result = await db.execute(assignment_stmt)
+    assignment = assignment_result.scalars().first()
+
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access feedback results for trainings assigned to you"
+        )
+
+    # Get the shared feedback
+    shared_stmt = select(models.SharedFeedback).where(
+        models.SharedFeedback.training_id == training_id
+    )
+    shared_result = await db.execute(shared_stmt)
+    shared_feedback = shared_result.scalar_one_or_none()
+
+    if not shared_feedback:
+        return None
+
+    # Get the feedback submission
+    submission_stmt = select(models.FeedbackSubmission).where(
+        models.FeedbackSubmission.training_id == training_id,
+        models.FeedbackSubmission.employee_empid == employee_username,
+        models.FeedbackSubmission.shared_feedback_id == shared_feedback.id
+    ).order_by(models.FeedbackSubmission.submitted_at.desc())
+    submission_result = await db.execute(submission_stmt)
+    submission = submission_result.scalars().first()
+
+    if not submission:
+        return None
+
+    responses_data = json.loads(submission.responses_data)
+    return FeedbackSubmissionResponse(
+        id=submission.id,
+        training_id=submission.training_id,
+        employee_empid=submission.employee_empid,
+        responses=responses_data,
+        submitted_at=submission.submitted_at
+    )
+
 # --- Manager Endpoints for Team Submissions ---
 
 class TeamAssignmentSubmissionResponse(BaseModel):
@@ -1426,6 +1511,9 @@ async def create_or_update_performance_feedback(
     manager_name = manager_name_row[0] if manager_name_row and manager_name_row[0] else manager_username
 
     employee_name = manager_relation.employee_name
+    
+    # Store training_name before commit to avoid lazy-loading issues
+    training_name = training.training_name
 
     if existing_feedback:
         # Update existing feedback
@@ -1444,7 +1532,7 @@ async def create_or_update_performance_feedback(
         return ManagerPerformanceFeedbackResponse(
             id=existing_feedback.id,
             training_id=existing_feedback.training_id,
-            training_name=training.training_name,
+            training_name=training_name,
             employee_empid=existing_feedback.employee_empid,
             employee_name=employee_name,
             manager_empid=existing_feedback.manager_empid,
@@ -1480,7 +1568,7 @@ async def create_or_update_performance_feedback(
         return ManagerPerformanceFeedbackResponse(
             id=new_feedback.id,
             training_id=new_feedback.training_id,
-            training_name=training.training_name,
+            training_name=training_name,
             employee_empid=new_feedback.employee_empid,
             employee_name=employee_name,
             manager_empid=new_feedback.manager_empid,

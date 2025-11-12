@@ -1,3 +1,24 @@
+"""
+Excel Data Loader Module
+
+Purpose: Load and process Excel/CSV files to populate database tables
+Features:
+- Excel file parsing and data extraction
+- Flexible column name matching
+- Data validation and cleaning
+- Database insertion for trainers, trainings, and competencies
+- Manager-employee relationship loading from CSV
+
+Functions:
+- clean_headers(): Standardize DataFrame column names
+- find_column_flexible(): Flexible column matching
+- load_all_from_excel(): Main function to load Excel data
+- load_manager_employee_from_csv(): Load manager-employee relationships
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 import pandas as pd
 import numpy as np
 from sqlalchemy import text
@@ -11,7 +32,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 def clean_headers(df: pd.DataFrame) -> pd.DataFrame:
-    """Cleans and standardizes DataFrame column headers."""
+    """
+    Cleans and standardizes DataFrame column headers.
+    
+    Converts column names to lowercase, replaces spaces/special chars with underscores.
+    This ensures consistent column naming regardless of Excel file formatting.
+    
+    Args:
+        df: Input DataFrame with potentially inconsistent column names
+        
+    Returns:
+        DataFrame with cleaned column headers
+    """
     df.columns = (
         df.columns.str.strip()
         .str.lower()

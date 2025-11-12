@@ -1,10 +1,29 @@
-# app/routes/assignment_routes.py
+"""
+Assignment Routes Module
+
+Purpose: API routes for training assignment management
+Features:
+- Assign trainings to employees (managers only)
+- Get assignments for current user
+- Get team assignments (managers only)
+- Delete assignments
+
+Endpoints:
+- POST /assignments/: Assign training to employee
+- GET /assignments/my: Get current user's assignments
+- GET /assignments/manager/team: Get team assignments (manager only)
+- DELETE /assignments/{id}: Delete assignment
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import date, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from sqlalchemy.future import select
+from sqlalchemy import delete
 
 from app.database import get_db_async
 from app import models
@@ -16,6 +35,7 @@ router = APIRouter(
 )
 
 class AssignmentCreate(BaseModel):
+    """Request schema for creating a training assignment"""
     training_id: int
     employee_username: str
 
@@ -146,3 +166,47 @@ async def get_team_assigned_trainings(
         }
         for assignment in assignments
     ]
+
+@router.delete("/{training_id}/{employee_empid}", status_code=200)
+async def delete_assignment(
+    training_id: int,
+    employee_empid: str,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Deletes an assignment record. Used when manager wants to reassign a training.
+    Only the manager who assigned the training can delete it.
+    """
+    manager_username = current_user.get("username")
+    if not manager_username:
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials"
+        )
+    
+    # Find the assignment
+    assignment_stmt = select(models.TrainingAssignment).where(
+        models.TrainingAssignment.training_id == training_id,
+        models.TrainingAssignment.employee_empid == employee_empid,
+        models.TrainingAssignment.manager_empid == manager_username
+    )
+    assignment_result = await db.execute(assignment_stmt)
+    assignment = assignment_result.scalar_one_or_none()
+    
+    if not assignment:
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment not found or you are not authorized to delete it"
+        )
+    
+    # Delete the assignment
+    delete_stmt = delete(models.TrainingAssignment).where(
+        models.TrainingAssignment.training_id == training_id,
+        models.TrainingAssignment.employee_empid == employee_empid,
+        models.TrainingAssignment.manager_empid == manager_username
+    )
+    await db.execute(delete_stmt)
+    await db.commit()
+    
+    return {"message": "Assignment deleted successfully"}

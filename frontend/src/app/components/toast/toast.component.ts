@@ -1,3 +1,18 @@
+/**
+ * Toast Component
+ * 
+ * Purpose: Displays toast notifications to users
+ * Features:
+ * - Multiple toast messages support
+ * - Auto-dismiss after duration
+ * - Manual dismiss via close button
+ * - Slide-in/out animations
+ * - Different styles for success, error, warning, and info types
+ * 
+ * @author Orbit Skill Development Team
+ * @date 2025
+ */
+
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ToastService, ToastMessage } from '../../services/toast.service';
 import { trigger, transition, style, animate } from '@angular/animations';
@@ -19,24 +34,45 @@ import { trigger, transition, style, animate } from '@angular/animations';
   ]
 })
 export class ToastComponent implements OnInit, OnDestroy {
+  /** Array of active toast messages to display */
   toasts: ToastMessage[] = [];
 
+  /**
+   * Component constructor - injects ToastService
+   * @param toastService - Service for managing toast notifications
+   */
   constructor(private toastService: ToastService) {}
 
+  /**
+   * Angular lifecycle hook - subscribes to toast service to receive new toasts
+   */
   ngOnInit(): void {
     this.toastService.toasts$.subscribe(toasts => {
       this.toasts = toasts;
     });
   }
 
+  /**
+   * Angular lifecycle hook - cleanup
+   * Note: Subscription cleanup is handled automatically by Angular
+   */
   ngOnDestroy(): void {
     // Cleanup handled by service
   }
 
+  /**
+   * Removes a toast message by ID
+   * @param id - Unique identifier of the toast to remove
+   */
   removeToast(id: string): void {
     this.toastService.remove(id);
   }
 
+  /**
+   * Returns the appropriate Font Awesome icon class based on toast type
+   * @param type - Toast type: 'success', 'error', 'warning', or 'info'
+   * @returns Font Awesome icon class name
+   */
   getIconClass(type: string): string {
     switch (type) {
       case 'success': return 'fa-check-circle';
@@ -47,6 +83,11 @@ export class ToastComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Returns Tailwind CSS classes for toast container based on type
+   * @param type - Toast type: 'success', 'error', 'warning', or 'info'
+   * @returns Tailwind CSS class string for background, border, and text colors
+   */
   getToastClass(type: string): string {
     switch (type) {
       case 'success': return 'bg-green-50 border-green-200 text-green-800';
@@ -57,6 +98,11 @@ export class ToastComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Returns Tailwind CSS classes for icon color based on toast type
+   * @param type - Toast type: 'success', 'error', 'warning', or 'info'
+   * @returns Tailwind CSS class string for icon text color
+   */
   getIconColorClass(type: string): string {
     switch (type) {
       case 'success': return 'text-green-500';

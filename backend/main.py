@@ -1,8 +1,38 @@
+"""
+Orbit Skill Backend API - Main Application Entry Point
+
+Purpose: FastAPI application for managing employee skills, trainings, and assignments
+Features:
+- User authentication and authorization
+- Skill and competency management
+- Training catalog and assignment management
+- Assignment and feedback submission tracking
+- Manager-employee relationship management
+- Data import from Excel/CSV files
+
+API Endpoints:
+- /register: User registration
+- /login: User authentication
+- /data/engineer: Engineer dashboard data
+- /data/manager/dashboard: Manager dashboard data
+- /trainings/: Training CRUD operations
+- /assignments/: Assignment management
+- /training-requests/: Training request management
+- /additional-skills/: Additional skills management
+- /shared-content/: Shared assignments and feedback
+- /upload-and-refresh: Excel data import
+- /upload-manager-employee-csv: CSV data import
+
+@author Orbit Skill Development Team
+@date 2025
+"""
+
 import sys
 import os
 
 # --- ADDED: Fix ModuleNotFoundError: No module named 'app' ---
 # This ensures the directory containing 'app' (which is 'backend') is on the Python path
+# Required for proper module resolution when running the application
 sys.path.append(os.path.dirname(os.path.abspath(__file__))) 
 # -------------------------------------------------------------
 
@@ -15,9 +45,11 @@ from app.database import AsyncSessionLocal, create_db_and_tables
 from app.excel_loader import load_all_from_excel, load_manager_employee_from_csv
 
 # --- Configuration ---
+# Set up logging with timestamp and level information
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- FastAPI App Initialization ---
+# Create FastAPI application instance with metadata
 app = FastAPI(
     title="SkillOrbit API",
     description="API for managing skills and training data.",
@@ -25,9 +57,11 @@ app = FastAPI(
 )
 
 # --- CORS Middleware ---
+# Configure CORS to allow requests from Angular frontend
+# Update origins list for production deployment
 origins = [
-    "http://localhost:4200",
-    "http://127.0.0.1:4200",
+    "http://localhost:4200",  # Angular development server
+    "http://127.0.0.1:4200",  # Alternative localhost
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +86,10 @@ app.include_router(shared_content_routes.router)
 @app.get("/", tags=["Default"])
 async def read_root():
     """
-    A simple welcome message to confirm the API is running.
+    Root endpoint - Welcome message to confirm the API is running.
+    
+    Returns:
+        dict: Welcome message with link to API documentation
     """
     return {"message": "Welcome to the SkillOrbit API. Please go to /docs for the API documentation."}
 
@@ -60,7 +97,24 @@ async def read_root():
 @app.post("/upload-and-refresh", status_code=200, tags=["Admin"])
 async def upload_and_refresh_data(file: UploadFile = File(...)):
     """
-    Accepts an Excel file upload, reads its content in memory, and refreshes the database.
+    Admin endpoint: Upload Excel file and refresh database with training/competency data.
+    
+    Accepts an Excel file (.xlsx, .xls) containing:
+    - Trainer data
+    - Training details
+    - Employee competencies
+    
+    The file is processed and data is loaded into the database, replacing existing records.
+    
+    Args:
+        file: Excel file upload containing training and competency data
+        
+    Returns:
+        dict: Success message with counts of inserted records
+        
+    Raises:
+        HTTPException: 400 if file type is invalid or validation fails
+        HTTPException: 500 if processing error occurs
     """
     logging.info(f"API: Received file '{file.filename}' for data refresh.")
 
@@ -103,9 +157,26 @@ async def upload_and_refresh_data(file: UploadFile = File(...)):
 @app.post("/upload-manager-employee-csv", status_code=200, tags=["Admin"])
 async def upload_manager_employee_csv(file: UploadFile = File(...)):
     """
-    Accepts a CSV file upload for manager-employee relationships and loads it into the database.
-    Expected CSV columns: manager_empid, manager_name, employee_empid, employee_name, 
-                         manager_is_trainer, employee_is_trainer
+    Admin endpoint: Upload CSV file and load manager-employee relationships.
+    
+    Accepts a CSV file (.csv) containing manager-employee relationships.
+    Expected CSV columns:
+    - manager_empid: Manager's employee ID
+    - manager_name: Manager's name
+    - employee_empid: Employee's ID
+    - employee_name: Employee's name
+    - manager_is_trainer: Boolean indicating if manager is a trainer
+    - employee_is_trainer: Boolean indicating if employee is a trainer
+    
+    Args:
+        file: CSV file upload containing manager-employee relationship data
+        
+    Returns:
+        dict: Success message with count of relationships inserted
+        
+    Raises:
+        HTTPException: 400 if file type is invalid or validation fails
+        HTTPException: 500 if processing error occurs
     """
     logging.info(f"API: Received CSV file '{file.filename}' for manager-employee data load.")
 
@@ -145,7 +216,15 @@ async def upload_manager_employee_csv(file: UploadFile = File(...)):
 @app.on_event("startup")
 async def on_startup():
     """
-    This function runs when the FastAPI application starts.
+    Application startup event handler.
+    
+    This function runs automatically when the FastAPI application starts.
+    It initializes the database by creating all required tables if they don't exist.
+    
+    Actions:
+    1. Initialize database connection
+    2. Create all database tables (if not exist)
+    3. Log startup completion
     """
     logging.info("STARTUP: Initializing database...")
     await create_db_and_tables()

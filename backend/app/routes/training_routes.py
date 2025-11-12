@@ -1,4 +1,24 @@
-# backend/app/routes/training_routes.py
+"""
+Training Routes Module
+
+Purpose: API routes for training management
+Features:
+- Create new training sessions (trainers only)
+- Get all available trainings
+- Get training by ID
+- Update training details
+- Delete training
+
+Endpoints:
+- POST /trainings/: Create a new training
+- GET /trainings/: Get all trainings
+- GET /trainings/{id}: Get training by ID
+- PUT /trainings/{id}: Update training
+- DELETE /trainings/{id}: Delete training
+
+@author Orbit Skill Development Team
+@date 2025
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
