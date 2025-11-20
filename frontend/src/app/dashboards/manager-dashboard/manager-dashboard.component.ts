@@ -135,9 +135,11 @@ interface ManagerPerformanceFeedback {
     employee_name: string;
     manager_empid: string;
     manager_name: string;
-    knowledge_retention?: number;
-    practical_application?: number;
-    engagement_level?: number;
+    application_of_training?: number;
+    quality_of_deliverables?: number;
+    problem_solving_capability?: number;
+    productivity_independence?: number;
+    process_compliance_adherence?: number;
     improvement_areas?: string;
     strengths?: string;
     overall_performance: number;
@@ -378,9 +380,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   performanceFeedback = {
     training_id: 0,
     employee_empid: '',
-    knowledge_retention: null as number | null,
-    practical_application: null as number | null,
-    engagement_level: null as number | null,
+    application_of_training: null as number | null,
+    quality_of_deliverables: null as number | null,
+    problem_solving_capability: null as number | null,
+    productivity_independence: null as number | null,
+    process_compliance_adherence: null as number | null,
     improvement_areas: '',
     strengths: '',
     overall_performance: 3,
@@ -791,9 +795,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.performanceFeedback = {
       training_id: submission.training_id,
       employee_empid: submission.employee_empid,
-      knowledge_retention: null,
-      practical_application: null,
-      engagement_level: null,
+      application_of_training: null,
+      quality_of_deliverables: null,
+      problem_solving_capability: null,
+      productivity_independence: null,
+      process_compliance_adherence: null,
       improvement_areas: '',
       strengths: '',
       overall_performance: 3,
@@ -820,9 +826,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
           this.performanceFeedback = {
             training_id: feedback.training_id,
             employee_empid: feedback.employee_empid,
-            knowledge_retention: feedback.knowledge_retention || null,
-            practical_application: feedback.practical_application || null,
-            engagement_level: feedback.engagement_level || null,
+            application_of_training: feedback.application_of_training || null,
+            quality_of_deliverables: feedback.quality_of_deliverables || null,
+            problem_solving_capability: feedback.problem_solving_capability || null,
+            productivity_independence: feedback.productivity_independence || null,
+            process_compliance_adherence: feedback.process_compliance_adherence || null,
             improvement_areas: feedback.improvement_areas || '',
             strengths: feedback.strengths || '',
             overall_performance: feedback.overall_performance,
@@ -873,9 +881,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.performanceFeedback = {
       training_id: 0,
       employee_empid: '',
-      knowledge_retention: null,
-      practical_application: null,
-      engagement_level: null,
+      application_of_training: null,
+      quality_of_deliverables: null,
+      problem_solving_capability: null,
+      productivity_independence: null,
+      process_compliance_adherence: null,
       improvement_areas: '',
       strengths: '',
       overall_performance: 3,
@@ -1189,9 +1199,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
 
     // Validate optional ratings
     const ratings = [
-      { name: 'Knowledge Retention', value: this.performanceFeedback.knowledge_retention },
-      { name: 'Practical Application', value: this.performanceFeedback.practical_application },
-      { name: 'Engagement Level', value: this.performanceFeedback.engagement_level }
+      { name: 'Application of Training in Daily Work', value: this.performanceFeedback.application_of_training },
+      { name: 'Quality of Deliverables', value: this.performanceFeedback.quality_of_deliverables },
+      { name: 'Problem-Solving Capability', value: this.performanceFeedback.problem_solving_capability },
+      { name: 'Productivity & Independence', value: this.performanceFeedback.productivity_independence },
+      { name: 'Process & Compliance Adherence', value: this.performanceFeedback.process_compliance_adherence }
     ];
 
     for (const rating of ratings) {
@@ -1210,9 +1222,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     const payload = {
       training_id: this.performanceFeedback.training_id,
       employee_empid: this.performanceFeedback.employee_empid,
-      knowledge_retention: this.performanceFeedback.knowledge_retention,
-      practical_application: this.performanceFeedback.practical_application,
-      engagement_level: this.performanceFeedback.engagement_level,
+      application_of_training: this.performanceFeedback.application_of_training,
+      quality_of_deliverables: this.performanceFeedback.quality_of_deliverables,
+      problem_solving_capability: this.performanceFeedback.problem_solving_capability,
+      productivity_independence: this.performanceFeedback.productivity_independence,
+      process_compliance_adherence: this.performanceFeedback.process_compliance_adherence,
       improvement_areas: this.performanceFeedback.improvement_areas || null,
       strengths: this.performanceFeedback.strengths || null,
       overall_performance: this.performanceFeedback.overall_performance,

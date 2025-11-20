@@ -1386,9 +1386,11 @@ async def get_team_feedback_submissions(
 class ManagerPerformanceFeedbackCreate(BaseModel):
     training_id: int
     employee_empid: str
-    knowledge_retention: Optional[int] = None  # 1-5
-    practical_application: Optional[int] = None  # 1-5
-    engagement_level: Optional[int] = None  # 1-5
+    application_of_training: Optional[int] = None  # 1-5
+    quality_of_deliverables: Optional[int] = None  # 1-5
+    problem_solving_capability: Optional[int] = None  # 1-5
+    productivity_independence: Optional[int] = None  # 1-5
+    process_compliance_adherence: Optional[int] = None  # 1-5
     improvement_areas: Optional[str] = None
     strengths: Optional[str] = None
     overall_performance: int  # 1-5 (required)
@@ -1402,9 +1404,11 @@ class ManagerPerformanceFeedbackResponse(BaseModel):
     employee_name: str
     manager_empid: str
     manager_name: str
-    knowledge_retention: Optional[int]
-    practical_application: Optional[int]
-    engagement_level: Optional[int]
+    application_of_training: Optional[int]
+    quality_of_deliverables: Optional[int]
+    problem_solving_capability: Optional[int]
+    productivity_independence: Optional[int]
+    process_compliance_adherence: Optional[int]
     improvement_areas: Optional[str]
     strengths: Optional[str]
     overall_performance: int
@@ -1441,9 +1445,11 @@ async def create_or_update_performance_feedback(
         )
     
     for field_name, field_value in [
-        ("knowledge_retention", feedback_data.knowledge_retention),
-        ("practical_application", feedback_data.practical_application),
-        ("engagement_level", feedback_data.engagement_level)
+        ("application_of_training", feedback_data.application_of_training),
+        ("quality_of_deliverables", feedback_data.quality_of_deliverables),
+        ("problem_solving_capability", feedback_data.problem_solving_capability),
+        ("productivity_independence", feedback_data.productivity_independence),
+        ("process_compliance_adherence", feedback_data.process_compliance_adherence)
     ]:
         if field_value is not None and (field_value < 1 or field_value > 5):
             raise HTTPException(
@@ -1512,9 +1518,11 @@ async def create_or_update_performance_feedback(
         training_id=feedback_data.training_id,
         employee_empid=feedback_data.employee_empid,
         manager_empid=manager_username,
-        knowledge_retention=feedback_data.knowledge_retention,
-        practical_application=feedback_data.practical_application,
-        engagement_level=feedback_data.engagement_level,
+        application_of_training=feedback_data.application_of_training,
+        quality_of_deliverables=feedback_data.quality_of_deliverables,
+        problem_solving_capability=feedback_data.problem_solving_capability,
+        productivity_independence=feedback_data.productivity_independence,
+        process_compliance_adherence=feedback_data.process_compliance_adherence,
         improvement_areas=feedback_data.improvement_areas,
         strengths=feedback_data.strengths,
         overall_performance=feedback_data.overall_performance,
@@ -1532,9 +1540,11 @@ async def create_or_update_performance_feedback(
         employee_name=employee_name,
         manager_empid=new_feedback.manager_empid,
         manager_name=manager_name,
-        knowledge_retention=new_feedback.knowledge_retention,
-        practical_application=new_feedback.practical_application,
-        engagement_level=new_feedback.engagement_level,
+        application_of_training=new_feedback.application_of_training,
+        quality_of_deliverables=new_feedback.quality_of_deliverables,
+        problem_solving_capability=new_feedback.problem_solving_capability,
+        productivity_independence=new_feedback.productivity_independence,
+        process_compliance_adherence=new_feedback.process_compliance_adherence,
         improvement_areas=new_feedback.improvement_areas,
         strengths=new_feedback.strengths,
         overall_performance=new_feedback.overall_performance,
@@ -1607,9 +1617,11 @@ async def get_performance_feedback(
         employee_name=manager_relation.employee_name,
         manager_empid=feedback.manager_empid,
         manager_name=manager_name,
-        knowledge_retention=feedback.knowledge_retention,
-        practical_application=feedback.practical_application,
-        engagement_level=feedback.engagement_level,
+        application_of_training=feedback.application_of_training,
+        quality_of_deliverables=feedback.quality_of_deliverables,
+        problem_solving_capability=feedback.problem_solving_capability,
+        productivity_independence=feedback.productivity_independence,
+        process_compliance_adherence=feedback.process_compliance_adherence,
         improvement_areas=feedback.improvement_areas,
         strengths=feedback.strengths,
         overall_performance=feedback.overall_performance,
@@ -1685,9 +1697,11 @@ async def get_performance_feedback_history(
             employee_name=manager_relation.employee_name,
             manager_empid=feedback.manager_empid,
             manager_name=manager_name,
-            knowledge_retention=feedback.knowledge_retention,
-            practical_application=feedback.practical_application,
-            engagement_level=feedback.engagement_level,
+            application_of_training=feedback.application_of_training,
+            quality_of_deliverables=feedback.quality_of_deliverables,
+            problem_solving_capability=feedback.problem_solving_capability,
+            productivity_independence=feedback.productivity_independence,
+            process_compliance_adherence=feedback.process_compliance_adherence,
             improvement_areas=feedback.improvement_areas,
             strengths=feedback.strengths,
             overall_performance=feedback.overall_performance,
@@ -1746,9 +1760,11 @@ async def get_employee_performance_feedback(
             employee_name=employee_name or feedback.employee_empid,
             manager_empid=feedback.manager_empid,
             manager_name=manager_name or feedback.manager_empid,
-            knowledge_retention=feedback.knowledge_retention,
-            practical_application=feedback.practical_application,
-            engagement_level=feedback.engagement_level,
+            application_of_training=feedback.application_of_training,
+            quality_of_deliverables=feedback.quality_of_deliverables,
+            problem_solving_capability=feedback.problem_solving_capability,
+            productivity_independence=feedback.productivity_independence,
+            process_compliance_adherence=feedback.process_compliance_adherence,
             improvement_areas=feedback.improvement_areas,
             strengths=feedback.strengths,
             overall_performance=feedback.overall_performance,

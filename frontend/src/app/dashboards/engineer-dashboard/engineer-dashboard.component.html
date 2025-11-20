@@ -1997,18 +1997,26 @@
                             {{ feedback.overall_performance }}/5
                         </span>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mb-3">
-                        <div *ngIf="feedback.knowledge_retention" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Knowledge</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
-                        </div>
-                        <div *ngIf="feedback.practical_application" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+                        <div *ngIf="feedback.application_of_training" class="bg-white/70 rounded px-2 py-1.5 text-center">
                             <p class="text-[10px] text-slate-600 font-medium">Application</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.application_of_training }}/5</p>
                         </div>
-                        <div *ngIf="feedback.engagement_level" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Engagement</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
+                        <div *ngIf="feedback.quality_of_deliverables" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Quality</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.quality_of_deliverables }}/5</p>
+                        </div>
+                        <div *ngIf="feedback.problem_solving_capability" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Problem-Solving</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.problem_solving_capability }}/5</p>
+                        </div>
+                        <div *ngIf="feedback.productivity_independence" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Productivity</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.productivity_independence }}/5</p>
+                        </div>
+                        <div *ngIf="feedback.process_compliance_adherence" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Compliance</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.process_compliance_adherence }}/5</p>
                         </div>
                     </div>
                     <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-2">
@@ -2016,19 +2024,19 @@
                             <p class="text-[10px] font-semibold text-green-800 mb-1">
                                 <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
                             </p>
-                            <p class="text-xs text-green-700">{{ feedback.strengths }}</p>
+                            <p class="text-xs text-green-700 whitespace-pre-wrap break-words">{{ feedback.strengths }}</p>
                         </div>
                         <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-3 py-2">
                             <p class="text-[10px] font-semibold text-amber-800 mb-1">
                                 <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
                             </p>
-                            <p class="text-xs text-amber-700">{{ feedback.improvement_areas }}</p>
+                            <p class="text-xs text-amber-700 whitespace-pre-wrap break-words">{{ feedback.improvement_areas }}</p>
                         </div>
                         <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-3 py-2">
                             <p class="text-[10px] font-semibold text-blue-800 mb-1">
                                 <i class="fa-solid fa-comment mr-1"></i>Comments
                             </p>
-                            <p class="text-xs text-blue-700">{{ feedback.additional_comments }}</p>
+                            <p class="text-xs text-blue-700 whitespace-pre-wrap break-words">{{ feedback.additional_comments }}</p>
                         </div>
                     </div>
                     </div>

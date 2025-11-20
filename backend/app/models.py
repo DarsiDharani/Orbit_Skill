@@ -198,9 +198,11 @@ class ManagerPerformanceFeedback(Base):
     employee_empid = Column(String, ForeignKey('users.username'), nullable=False)
     manager_empid = Column(String, ForeignKey('users.username'), nullable=False)
     # Performance factors (ratings 1-5)
-    knowledge_retention = Column(Integer, nullable=True)  # How well they retained the knowledge
-    practical_application = Column(Integer, nullable=True)  # Ability to apply concepts in practice
-    engagement_level = Column(Integer, nullable=True)  # Level of engagement during training
+    application_of_training = Column(Integer, nullable=True)  # How effectively the employee is using the learned concepts/tools in real tasks
+    quality_of_deliverables = Column(Integer, nullable=True)  # Impact of training on code quality, test quality, design accuracy, defect reduction, etc.
+    problem_solving_capability = Column(Integer, nullable=True)  # Ability to apply trained methods to analyze issues, debug, and provide correct solutions
+    productivity_independence = Column(Integer, nullable=True)  # Whether the employee completes tasks faster, with less support, and shows improved efficiency after training
+    process_compliance_adherence = Column(Integer, nullable=True)  # Correct use of processes, tools, templates, and standards learned during training (ASPICE, ISO26262, etc.)
     improvement_areas = Column(Text, nullable=True)  # Areas that need improvement
     strengths = Column(Text, nullable=True)  # Key strengths demonstrated
     overall_performance = Column(Integer, nullable=False)  # Overall performance rating (1-5)

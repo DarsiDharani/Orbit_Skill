@@ -1961,18 +1961,26 @@
                       {{ feedback.overall_performance }}/5
                     </span>
                   </div>
-                  <div class="grid grid-cols-3 gap-2 mb-2">
-                    <div *ngIf="feedback.knowledge_retention" class="bg-slate-50 rounded px-2 py-1 text-center">
-                      <p class="text-[10px] text-slate-600 font-medium">Knowledge</p>
-                      <p class="text-xs font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
-                    </div>
-                    <div *ngIf="feedback.practical_application" class="bg-slate-50 rounded px-2 py-1 text-center">
+                  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-2">
+                    <div *ngIf="feedback.application_of_training" class="bg-slate-50 rounded px-2 py-1 text-center">
                       <p class="text-[10px] text-slate-600 font-medium">Application</p>
-                      <p class="text-xs font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.application_of_training }}/5</p>
                     </div>
-                    <div *ngIf="feedback.engagement_level" class="bg-slate-50 rounded px-2 py-1 text-center">
-                      <p class="text-[10px] text-slate-600 font-medium">Engagement</p>
-                      <p class="text-xs font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
+                    <div *ngIf="feedback.quality_of_deliverables" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Quality</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.quality_of_deliverables }}/5</p>
+                    </div>
+                    <div *ngIf="feedback.problem_solving_capability" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Problem-Solving</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.problem_solving_capability }}/5</p>
+                    </div>
+                    <div *ngIf="feedback.productivity_independence" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Productivity</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.productivity_independence }}/5</p>
+                    </div>
+                    <div *ngIf="feedback.process_compliance_adherence" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Compliance</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.process_compliance_adherence }}/5</p>
                     </div>
                   </div>
                   <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-1.5 mt-2">
@@ -2016,14 +2024,14 @@
                 <i class="fa-solid fa-star text-amber-500"></i>
                 Performance Ratings (1-5 Scale)
               </h3>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <!-- Knowledge Retention -->
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Application of Training in Daily Work -->
                 <div>
                   <label class="block text-sm font-semibold text-slate-700 mb-2">
-                    Knowledge Retention
-                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                    Application of Training in Daily Work
                   </label>
-                  <select [(ngModel)]="performanceFeedback.knowledge_retention" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <p class="text-xs text-slate-500 mb-2">How effectively the employee is using the learned concepts/tools in real tasks.</p>
+                  <select [(ngModel)]="performanceFeedback.application_of_training" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
                     <option [value]="null">Not Rated</option>
                     <option [value]="1">1 - Poor</option>
                     <option [value]="2">2 - Below Average</option>
@@ -2033,13 +2041,13 @@
                   </select>
                 </div>
 
-                <!-- Practical Application -->
+                <!-- Quality of Deliverables -->
                 <div>
                   <label class="block text-sm font-semibold text-slate-700 mb-2">
-                    Practical Application
-                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                    Quality of Deliverables
                   </label>
-                  <select [(ngModel)]="performanceFeedback.practical_application" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <p class="text-xs text-slate-500 mb-2">Impact of training on code quality, test quality, design accuracy, defect reduction, etc.</p>
+                  <select [(ngModel)]="performanceFeedback.quality_of_deliverables" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
                     <option [value]="null">Not Rated</option>
                     <option [value]="1">1 - Poor</option>
                     <option [value]="2">2 - Below Average</option>
@@ -2049,13 +2057,45 @@
                   </select>
                 </div>
 
-                <!-- Engagement Level -->
+                <!-- Problem-Solving Capability -->
                 <div>
                   <label class="block text-sm font-semibold text-slate-700 mb-2">
-                    Engagement Level
-                    <span class="text-xs text-slate-500 font-normal">(Optional)</span>
+                    Problem-Solving Capability
                   </label>
-                  <select [(ngModel)]="performanceFeedback.engagement_level" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <p class="text-xs text-slate-500 mb-2">Ability to apply trained methods to analyze issues, debug, and provide correct solutions.</p>
+                  <select [(ngModel)]="performanceFeedback.problem_solving_capability" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option [value]="null">Not Rated</option>
+                    <option [value]="1">1 - Poor</option>
+                    <option [value]="2">2 - Below Average</option>
+                    <option [value]="3">3 - Average</option>
+                    <option [value]="4">4 - Good</option>
+                    <option [value]="5">5 - Excellent</option>
+                  </select>
+                </div>
+
+                <!-- Productivity & Independence -->
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    Productivity & Independence
+                  </label>
+                  <p class="text-xs text-slate-500 mb-2">Whether the employee completes tasks faster, with less support, and shows improved efficiency after training.</p>
+                  <select [(ngModel)]="performanceFeedback.productivity_independence" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                    <option [value]="null">Not Rated</option>
+                    <option [value]="1">1 - Poor</option>
+                    <option [value]="2">2 - Below Average</option>
+                    <option [value]="3">3 - Average</option>
+                    <option [value]="4">4 - Good</option>
+                    <option [value]="5">5 - Excellent</option>
+                  </select>
+                </div>
+
+                <!-- Process & Compliance Adherence -->
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">
+                    Process & Compliance Adherence
+                  </label>
+                  <p class="text-xs text-slate-500 mb-2">Correct use of processes, tools, templates, and standards learned during training (ASPICE, ISO26262, etc.).</p>
+                  <select [(ngModel)]="performanceFeedback.process_compliance_adherence" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
                     <option [value]="null">Not Rated</option>
                     <option [value]="1">1 - Poor</option>
                     <option [value]="2">2 - Below Average</option>

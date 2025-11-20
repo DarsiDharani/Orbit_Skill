@@ -130,12 +130,16 @@ export interface ManagerPerformanceFeedback {
   manager_empid: string;
   /** Name of the manager */
   manager_name: string;
-  /** Knowledge retention score (optional, 1-5 scale) */
-  knowledge_retention?: number;
-  /** Practical application score (optional, 1-5 scale) */
-  practical_application?: number;
-  /** Engagement level score (optional, 1-5 scale) */
-  engagement_level?: number;
+  /** Application of training in daily work score (optional, 1-5 scale) */
+  application_of_training?: number;
+  /** Quality of deliverables score (optional, 1-5 scale) */
+  quality_of_deliverables?: number;
+  /** Problem-solving capability score (optional, 1-5 scale) */
+  problem_solving_capability?: number;
+  /** Productivity & independence score (optional, 1-5 scale) */
+  productivity_independence?: number;
+  /** Process & compliance adherence score (optional, 1-5 scale) */
+  process_compliance_adherence?: number;
   /** Areas where employee needs improvement */
   improvement_areas?: string;
   /** Employee's strengths */

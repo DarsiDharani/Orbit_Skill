@@ -423,9 +423,24 @@ export class EngineerDashboardComponent implements OnInit {
           const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
           return dateB - dateA; // Descending order (newest first)
         });
-        // Debug: Log all feedback to verify backend is returning all entries
+        // Debug: Log all feedback to verify backend is returning all entries with all fields
         console.log('All manager feedback received:', this.managerFeedback);
         console.log('Total feedback entries from backend:', this.managerFeedback.length);
+        // Log detailed field information for each feedback entry
+        this.managerFeedback.forEach((fb, index) => {
+          console.log(`Feedback ${index + 1}:`, {
+            id: fb.id,
+            training_id: fb.training_id,
+            training_name: fb.training_name,
+            improvement_areas: fb.improvement_areas,
+            strengths: fb.strengths,
+            additional_comments: fb.additional_comments,
+            overall_performance: fb.overall_performance,
+            has_improvement_areas: !!fb.improvement_areas,
+            has_strengths: !!fb.strengths,
+            has_additional_comments: !!fb.additional_comments
+          });
+        });
         this.isLoadingFeedback = false;
       },
       error: (err) => {
@@ -491,7 +506,11 @@ export class EngineerDashboardComponent implements OnInit {
       return t.skill.toLowerCase().trim() === skillNameLower;
     });
 
+    // Debug: Log matching information
+    console.log(`Matching trainings for skill "${skillName}":`, matchingTrainings.map(t => ({ id: t.id, name: t.training_name, skill: t.skill })));
+
     if (matchingTrainings.length === 0) {
+      console.log(`No trainings found matching skill "${skillName}"`);
       return [];
     }
 
@@ -506,6 +525,18 @@ export class EngineerDashboardComponent implements OnInit {
     const filteredFeedback = this.managerFeedback.filter(feedback => {
       if (!feedback || !feedback.training_id) return false;
       return trainingIds.includes(feedback.training_id);
+    });
+
+    // Debug: Log filtered feedback information
+    console.log(`Filtered feedback for skill "${skillName}" (training IDs: ${trainingIds.join(', ')}):`, filteredFeedback.length, 'entries');
+    filteredFeedback.forEach((fb, idx) => {
+      console.log(`  Feedback ${idx + 1}:`, {
+        training_id: fb.training_id,
+        training_name: fb.training_name,
+        has_improvement_areas: !!fb.improvement_areas,
+        has_strengths: !!fb.strengths,
+        has_additional_comments: !!fb.additional_comments
+      });
     });
 
     // Group feedback by training_id and add update numbers
@@ -530,11 +561,27 @@ export class EngineerDashboardComponent implements OnInit {
 
       // Add update number and total updates count
       feedbackList.forEach((feedback, index) => {
-        enrichedFeedback.push({
+        // Ensure all feedback fields are preserved when enriching
+        const enrichedEntry = {
           ...feedback,
           updateNumber: index + 1,
           totalUpdates: feedbackList.length
-        });
+        };
+        // Debug: Log to verify all fields are preserved
+        if (index === 0) {
+          console.log('Enriched feedback entry (most recent):', {
+            id: enrichedEntry.id,
+            training_id: enrichedEntry.training_id,
+            training_name: enrichedEntry.training_name,
+            improvement_areas: enrichedEntry.improvement_areas,
+            strengths: enrichedEntry.strengths,
+            additional_comments: enrichedEntry.additional_comments,
+            improvement_areas_length: enrichedEntry.improvement_areas?.length || 0,
+            strengths_length: enrichedEntry.strengths?.length || 0,
+            additional_comments_length: enrichedEntry.additional_comments?.length || 0
+          });
+        }
+        enrichedFeedback.push(enrichedEntry);
       });
     });
 
@@ -566,9 +613,26 @@ export class EngineerDashboardComponent implements OnInit {
     if (!skillName) return;
     this.selectedSkillForFeedback = skillName;
     this.skillFeedbackList = this.getFeedbackForSkill(skillName);
-    // Debug: Log all feedback entries to verify all are being returned
+    // Debug: Log all feedback entries to verify all are being returned with complete data
     console.log(`Feedback for skill "${skillName}":`, this.skillFeedbackList);
     console.log(`Total feedback entries: ${this.skillFeedbackList.length}`);
+    // Log detailed information about each feedback entry's text fields
+    this.skillFeedbackList.forEach((fb, index) => {
+      console.log(`Skill Feedback Entry ${index + 1} for "${skillName}":`, {
+        training_name: fb.training_name,
+        training_id: fb.training_id,
+        improvement_areas: fb.improvement_areas,
+        improvement_areas_present: !!fb.improvement_areas,
+        improvement_areas_length: fb.improvement_areas?.length || 0,
+        strengths: fb.strengths,
+        strengths_present: !!fb.strengths,
+        strengths_length: fb.strengths?.length || 0,
+        additional_comments: fb.additional_comments,
+        additional_comments_present: !!fb.additional_comments,
+        additional_comments_length: fb.additional_comments?.length || 0,
+        overall_performance: fb.overall_performance
+      });
+    });
     this.showSkillFeedbackModal = true;
   }
 
