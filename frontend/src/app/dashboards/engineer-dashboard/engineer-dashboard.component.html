@@ -460,89 +460,6 @@
                                 <div class="text-center py-8 text-slate-500 text-sm">You have no upcoming trainings.</div>
                             </ng-template>
                         </div>
-                        <!-- Manager Performance Feedback Section -->
-                        <div @slideFadeIn class="bg-white/80 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200/60 p-2">
-                            <div class="flex items-center justify-between mb-2">
-                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-                                    <i class="fa-solid fa-comment-dots text-indigo-600"></i>
-                                    <b>Manager Feedback</b>
-                                </h3>
-                                <button (click)="fetchManagerFeedback()" 
-                                        class="w-6 h-6 bg-indigo-100 hover:bg-indigo-200 rounded-full flex items-center justify-center transition-colors"
-                                        title="Refresh feedback">
-                                    <i class="fa-solid fa-rotate-right text-indigo-600 text-xs"></i>
-                                </button>
-                            </div>
-                            <div *ngIf="isLoadingFeedback" class="text-center py-4">
-                                <i class="fa-solid fa-spinner fa-spin text-indigo-600 text-lg mb-2"></i>
-                                <p class="text-xs text-slate-500">Loading feedback...</p>
-                            </div>
-                            <div *ngIf="!isLoadingFeedback && managerFeedback.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                <div *ngFor="let feedback of managerFeedback" 
-                                     class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-2.5 border border-indigo-200 hover:shadow-md transition-all">
-                                    <div class="flex items-start justify-between gap-2 mb-1.5">
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-1.5 mb-0.5">
-                                                <h4 class="font-bold text-slate-900 text-xs truncate">{{ feedback.training_name }}</h4>
-                                                <span *ngIf="isFeedbackRecentlyUpdated(feedback)" 
-                                                      class="px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
-                                                      title="Recently updated">
-                                                    <i class="fa-solid fa-sync-alt mr-0.5"></i>Updated
-                                                </span>
-                                            </div>
-                                            <p class="text-[10px] text-slate-600 mt-0.5">
-                                                <i class="fa-solid fa-user-tie mr-1"></i>
-                                                {{ feedback.manager_name }}
-                                                <span class="mx-1">•</span>
-                                                <i class="fa-solid fa-clock mr-1"></i>
-                                                {{ feedback.updated_at | date:'short' }}
-                                            </p>
-                                        </div>
-                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full flex-shrink-0" [ngClass]="getRatingColorClass(feedback.overall_performance)">
-                                            {{ feedback.overall_performance }}/5
-                                        </span>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-1.5 mb-2">
-                                        <div *ngIf="feedback.knowledge_retention" class="bg-white/70 rounded px-1.5 py-1 text-center">
-                                            <p class="text-[9px] text-slate-600 font-medium">Knowledge</p>
-                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
-                                        </div>
-                                        <div *ngIf="feedback.practical_application" class="bg-white/70 rounded px-1.5 py-1 text-center">
-                                            <p class="text-[9px] text-slate-600 font-medium">Application</p>
-                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
-                                        </div>
-                                        <div *ngIf="feedback.engagement_level" class="bg-white/70 rounded px-1.5 py-1 text-center">
-                                            <p class="text-[9px] text-slate-600 font-medium">Engagement</p>
-                                            <p class="text-[10px] font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
-                                        </div>
-                                    </div>
-                                    <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-1">
-                                        <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-2 py-1">
-                                            <p class="text-[9px] font-semibold text-green-800 mb-0.5">
-                                                <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
-                                            </p>
-                                            <p class="text-[10px] text-green-700 line-clamp-2">{{ feedback.strengths }}</p>
-                                        </div>
-                                        <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-2 py-1">
-                                            <p class="text-[9px] font-semibold text-amber-800 mb-0.5">
-                                                <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
-                                            </p>
-                                            <p class="text-[10px] text-amber-700 line-clamp-2">{{ feedback.improvement_areas }}</p>
-                                        </div>
-                                        <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-2 py-1">
-                                            <p class="text-[9px] font-semibold text-blue-800 mb-0.5">
-                                                <i class="fa-solid fa-comment mr-1"></i>Comments
-                                            </p>
-                                            <p class="text-[10px] text-blue-700 line-clamp-2">{{ feedback.additional_comments }}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div *ngIf="!isLoadingFeedback && managerFeedback.length === 0" class="text-center py-6 text-slate-500">
-                                <i class="fa-solid fa-comment-slash text-2xl mb-2 text-slate-400"></i>
-                                <p class="text-xs">No feedback received yet</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -569,13 +486,21 @@
                                                 <p class="text-xs text-slate-500">{{ competency.competency }}</p>
                                             </div>
                                         </div>
-                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ml-2 flex-shrink-0" [ngClass]="{
-                                            'bg-green-100 text-green-800': competency.status === 'Met',
-                                            'bg-orange-100 text-orange-800': competency.status === 'Gap',
-                                            'bg-red-100 text-red-800': competency.status === 'Error'
-                                            }">
-                                            {{ competency.status }}
-                                        </span>
+                                        <div class="flex items-center gap-2">
+                                            <button (click)="openSkillFeedbackModal(competency.skill)"
+                                                    class="w-7 h-7 flex items-center justify-center text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all duration-200 flex-shrink-0"
+                                                    [title]="hasFeedbackForSkill(competency.skill) ? 'View Manager Feedback' : 'No feedback available yet'"
+                                                    [ngClass]="{'opacity-50': !hasFeedbackForSkill(competency.skill)}">
+                                                <i class="fa-solid fa-comment-dots text-sm"></i>
+                                            </button>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider flex-shrink-0" [ngClass]="{
+                                                'bg-green-100 text-green-800': competency.status === 'Met',
+                                                'bg-orange-100 text-orange-800': competency.status === 'Gap',
+                                                'bg-red-100 text-red-800': competency.status === 'Error'
+                                                }">
+                                                {{ competency.status }}
+                                            </span>
+                                        </div>
                                     </div>
                     
                                     <div>
@@ -1976,6 +1901,145 @@
                 <button (click)="submitEngineerFeedback()" class="px-6 py-2.5 bg-amber-600 text-white rounded-full font-semibold hover:bg-amber-700 shadow-lg transition-all">
                     <i class="fa-solid fa-paper-plane mr-2"></i> Submit Feedback
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Skill Feedback Modal -->
+<div *ngIf="showSkillFeedbackModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50"
+    (click)="closeSkillFeedbackModal()">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl m-4 max-h-[85vh] flex flex-col" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-2xl border-b border-indigo-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
+                    <i class="fa-solid fa-comment-dots text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900">Manager Feedback</h3>
+                    <p class="text-sm text-slate-600">{{ selectedSkillForFeedback }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div *ngIf="skillFeedbackList.length > 0" class="text-right">
+                    <p class="text-xs text-slate-600">Total Feedback Entries</p>
+                    <p class="text-lg font-bold text-indigo-600">{{ skillFeedbackList.length }}</p>
+                </div>
+                <button (click)="closeSkillFeedbackModal()" 
+                        class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6">
+            <div *ngIf="skillFeedbackList.length > 0" class="space-y-4">
+                <ng-container *ngFor="let feedback of skillFeedbackList; let i = index">
+                    <!-- Training Group Header - Show when starting a new training or first entry -->
+                    <div *ngIf="i === 0 || skillFeedbackList[i-1].training_id !== feedback.training_id" 
+                         class="mb-3 pb-2 border-b-2 border-indigo-200">
+                        <div class="flex items-center justify-between">
+                            <h5 class="text-sm font-bold text-indigo-900">
+                                <i class="fa-solid fa-graduation-cap mr-2"></i>{{ feedback.training_name }}
+                            </h5>
+                            <span *ngIf="feedback.totalUpdates > 1" 
+                                  class="px-2 py-1 text-[10px] font-semibold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
+                                {{ feedback.totalUpdates }} Feedback Entries
+                            </span>
+                        </div>
+                    </div>
+                    <!-- Training Group Separator for different trainings -->
+                    <div *ngIf="i > 0 && skillFeedbackList[i-1].training_id !== feedback.training_id" 
+                         class="border-t-2 border-indigo-300 my-6 pt-4">
+                        <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
+                            <i class="fa-solid fa-arrow-down mr-2"></i>Previous Training Feedback
+                        </p>
+                    </div>
+                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200 hover:shadow-md transition-all relative"
+                         [ngClass]="{
+                           'mt-2': i > 0 && skillFeedbackList[i-1].training_id === feedback.training_id, 
+                           'mt-6': i > 0 && skillFeedbackList[i-1].training_id !== feedback.training_id,
+                           'border-l-4 border-l-purple-500': feedback.updateNumber > 1 && feedback.totalUpdates > 1,
+                           'border-l-4 border-l-green-500': feedback.updateNumber === 1 && feedback.totalUpdates > 1
+                         }">
+                    <div class="flex items-start justify-between gap-2 mb-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                <h4 class="font-bold text-slate-900 text-sm truncate">{{ feedback.training_name }}</h4>
+                                <span *ngIf="feedback.totalUpdates > 1" 
+                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300 flex-shrink-0"
+                                      [title]="'Update ' + feedback.updateNumber + ' of ' + feedback.totalUpdates">
+                                    <i class="fa-solid fa-history mr-1"></i>Update {{ feedback.updateNumber }}/{{ feedback.totalUpdates }}
+                                </span>
+                                <span *ngIf="feedback.updateNumber === 1 && feedback.totalUpdates > 1" 
+                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
+                                      title="Latest update">
+                                    <i class="fa-solid fa-star mr-1"></i>Latest
+                                </span>
+                                <span *ngIf="isFeedbackRecentlyUpdated(feedback)" 
+                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
+                                      title="Recently updated">
+                                    <i class="fa-solid fa-sync-alt mr-1"></i>Updated
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-600">
+                                <i class="fa-solid fa-user-tie mr-1"></i>
+                                {{ feedback.manager_name }}
+                                <span class="mx-1">•</span>
+                                <i class="fa-solid fa-clock mr-1"></i>
+                                {{ feedback.updated_at | date:'short' }}
+                                <span *ngIf="feedback.created_at !== feedback.updated_at" class="ml-1 text-slate-500">
+                                    (Updated)
+                                </span>
+                            </p>
+                        </div>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0" [ngClass]="getRatingColorClass(feedback.overall_performance)">
+                            {{ feedback.overall_performance }}/5
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <div *ngIf="feedback.knowledge_retention" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Knowledge</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
+                        </div>
+                        <div *ngIf="feedback.practical_application" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Application</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
+                        </div>
+                        <div *ngIf="feedback.engagement_level" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                            <p class="text-[10px] text-slate-600 font-medium">Engagement</p>
+                            <p class="text-xs font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
+                        </div>
+                    </div>
+                    <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-2">
+                        <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-3 py-2">
+                            <p class="text-[10px] font-semibold text-green-800 mb-1">
+                                <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
+                            </p>
+                            <p class="text-xs text-green-700">{{ feedback.strengths }}</p>
+                        </div>
+                        <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-3 py-2">
+                            <p class="text-[10px] font-semibold text-amber-800 mb-1">
+                                <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
+                            </p>
+                            <p class="text-xs text-amber-700">{{ feedback.improvement_areas }}</p>
+                        </div>
+                        <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-3 py-2">
+                            <p class="text-[10px] font-semibold text-blue-800 mb-1">
+                                <i class="fa-solid fa-comment mr-1"></i>Comments
+                            </p>
+                            <p class="text-xs text-blue-700">{{ feedback.additional_comments }}</p>
+                        </div>
+                    </div>
+                    </div>
+                </ng-container>
+            </div>
+            <div *ngIf="skillFeedbackList.length === 0" class="text-center py-12 text-slate-500">
+                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-comment-slash text-3xl text-slate-400"></i>
+                </div>
+                <p class="text-lg font-semibold text-slate-700 mb-2">No Feedback Available</p>
+                <p class="text-sm text-slate-500 max-w-md mx-auto">No feedback has been provided for <span class="font-medium text-slate-700">{{ selectedSkillForFeedback }}</span> yet. Feedback will appear here once your manager reviews your training performance.</p>
             </div>
         </div>
     </div>

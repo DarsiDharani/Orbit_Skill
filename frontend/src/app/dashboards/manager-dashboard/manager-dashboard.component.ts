@@ -144,6 +144,8 @@ interface ManagerPerformanceFeedback {
     additional_comments?: string;
     created_at: string;
     updated_at: string;
+    updateNumber?: number;  // Added for feedback history display
+    totalUpdates?: number;  // Added for feedback history display
 }
 
 // CalendarEvent, Assignment, AssignmentQuestion, QuestionOption, and FeedbackQuestion 
@@ -386,6 +388,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   };
   isSubmittingFeedback: boolean = false;
   existingFeedback: ManagerPerformanceFeedback | null = null;
+  feedbackHistory: ManagerPerformanceFeedback[] = [];
+  isLoadingFeedbackHistory: boolean = false;
   showSuccessPopup: boolean = false;
   successPopupMessage: string = '';
 
@@ -802,12 +806,13 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.loadExistingFeedback(submission.training_id, submission.employee_empid);
   }
 
-  // Load existing feedback
+  // Load existing feedback (latest) and all feedback history
   loadExistingFeedback(trainingId: number, employeeEmpid: string): void {
     const token = this.authService.getToken();
     if (!token) return;
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     
+    // Load latest feedback for editing
     this.http.get<ManagerPerformanceFeedback>(this.apiService.managerPerformanceFeedbackByIdUrl(trainingId, employeeEmpid), { headers }).subscribe({
       next: (feedback) => {
         if (feedback) {
@@ -830,6 +835,33 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
         console.log('No existing feedback found');
       }
     });
+
+    // Load all feedback history
+    this.isLoadingFeedbackHistory = true;
+    this.feedbackHistory = [];
+    this.http.get<ManagerPerformanceFeedback[]>(this.apiService.managerPerformanceFeedbackHistoryUrl(trainingId, employeeEmpid), { headers }).subscribe({
+      next: (history) => {
+        // Sort by updated_at descending (most recent first) and add update numbers
+        const sortedHistory = (history || []).sort((a, b) => {
+          const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+          return dateB - dateA;
+        });
+
+        // Add update numbers to each entry
+        this.feedbackHistory = sortedHistory.map((feedback, index) => ({
+          ...feedback,
+          updateNumber: index + 1,
+          totalUpdates: sortedHistory.length
+        }));
+        this.isLoadingFeedbackHistory = false;
+      },
+      error: (err) => {
+        console.error('Failed to load feedback history:', err);
+        this.feedbackHistory = [];
+        this.isLoadingFeedbackHistory = false;
+      }
+    });
   }
 
   // Close feedback modal
@@ -837,6 +869,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.showFeedbackModal = false;
     this.selectedSubmissionForFeedback = null;
     this.existingFeedback = null;
+    this.feedbackHistory = [];
     this.performanceFeedback = {
       training_id: 0,
       employee_empid: '',
@@ -1198,14 +1231,16 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
           true
         );
         
+        // Store training and employee info before closing modal
+        const trainingId = this.performanceFeedback.training_id;
+        const employeeEmpid = this.performanceFeedback.employee_empid;
+        
         // Close feedback modal first
         this.closeFeedbackModal();
         
         // Show success popup after a brief delay to ensure modal is closed
         setTimeout(() => {
-          this.successPopupMessage = isUpdate 
-            ? 'Feedback updated successfully! The employee will see the updated feedback.'
-            : 'Feedback submitted successfully! The employee will be notified.';
+          this.successPopupMessage = 'Feedback submitted successfully! A new entry has been created. All previous feedback entries are preserved and visible.';
           this.showSuccessPopup = true;
           console.log('Success popup should be visible now:', this.showSuccessPopup, this.successPopupMessage);
           

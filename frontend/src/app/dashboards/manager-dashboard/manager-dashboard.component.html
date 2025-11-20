@@ -1900,8 +1900,8 @@
                   <p class="text-indigo-100 mt-1 text-sm">
                     {{ selectedSubmissionForFeedback.submission.training_name }} - {{ selectedSubmissionForFeedback.submission.employee_name }}
                   </p>
-                  <p *ngIf="existingFeedback" class="text-xs text-indigo-200 mt-1">
-                    <i class="fa-solid fa-info-circle mr-1"></i>Updating existing feedback (Last updated: {{ existingFeedback.updated_at | date:'short' }})
+                  <p *ngIf="feedbackHistory.length > 0" class="text-xs text-indigo-200 mt-1">
+                    <i class="fa-solid fa-info-circle mr-1"></i>{{ feedbackHistory.length }} previous {{ feedbackHistory.length === 1 ? 'entry' : 'entries' }} available <span *ngIf="feedbackHistory.length > 0">(Latest: {{ feedbackHistory[0].updated_at | date:'short' }})</span>
                   </p>
                 </div>
               </div>
@@ -1913,6 +1913,103 @@
 
           <!-- Content -->
           <div class="p-6 space-y-6">
+            <!-- Previous Feedback History -->
+            <div *ngIf="feedbackHistory.length > 0" class="bg-slate-50 rounded-xl p-5 border border-slate-200">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <i class="fa-solid fa-history text-indigo-600"></i>
+                  Previous Feedback History
+                </h3>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
+                  {{ feedbackHistory.length }} {{ feedbackHistory.length === 1 ? 'Entry' : 'Entries' }}
+                </span>
+              </div>
+              <div *ngIf="isLoadingFeedbackHistory" class="text-center py-4">
+                <i class="fa-solid fa-spinner fa-spin text-indigo-600 text-xl"></i>
+                <p class="text-sm text-slate-600 mt-2">Loading feedback history...</p>
+              </div>
+              <div *ngIf="!isLoadingFeedbackHistory && feedbackHistory.length > 0" class="space-y-3 max-h-64 overflow-y-auto">
+                <div *ngFor="let feedback of feedbackHistory; let i = index" 
+                     class="bg-white rounded-lg p-4 border border-slate-200 hover:shadow-md transition-all"
+                     [ngClass]="{
+                       'border-l-4 border-l-green-500': (feedback.updateNumber === 1) && (feedback.totalUpdates !== undefined && feedback.totalUpdates > 1),
+                       'border-l-4 border-l-purple-500': (feedback.updateNumber !== undefined && feedback.updateNumber > 1) && (feedback.totalUpdates !== undefined && feedback.totalUpdates > 1)
+                     }">
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2 mb-1 flex-wrap">
+                        <span *ngIf="feedback.totalUpdates !== undefined && feedback.totalUpdates > 1" 
+                              class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300 flex-shrink-0">
+                          <i class="fa-solid fa-history mr-1"></i>Update {{ feedback.updateNumber }}/{{ feedback.totalUpdates }}
+                        </span>
+                        <span *ngIf="feedback.updateNumber === 1 && feedback.totalUpdates !== undefined && feedback.totalUpdates > 1" 
+                              class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0">
+                          <i class="fa-solid fa-star mr-1"></i>Latest
+                        </span>
+                      </div>
+                      <p class="text-xs text-slate-600">
+                        <i class="fa-solid fa-clock mr-1"></i>
+                        {{ feedback.updated_at | date:'short' }}
+                      </p>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0" 
+                          [ngClass]="{
+                            'bg-green-100 text-green-700': feedback.overall_performance >= 4,
+                            'bg-yellow-100 text-yellow-700': feedback.overall_performance === 3,
+                            'bg-red-100 text-red-700': feedback.overall_performance < 3
+                          }">
+                      {{ feedback.overall_performance }}/5
+                    </span>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2 mb-2">
+                    <div *ngIf="feedback.knowledge_retention" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Knowledge</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.knowledge_retention }}/5</p>
+                    </div>
+                    <div *ngIf="feedback.practical_application" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Application</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.practical_application }}/5</p>
+                    </div>
+                    <div *ngIf="feedback.engagement_level" class="bg-slate-50 rounded px-2 py-1 text-center">
+                      <p class="text-[10px] text-slate-600 font-medium">Engagement</p>
+                      <p class="text-xs font-bold text-slate-800">{{ feedback.engagement_level }}/5</p>
+                    </div>
+                  </div>
+                  <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-1.5 mt-2">
+                    <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-2 py-1">
+                      <p class="text-[10px] font-semibold text-green-800 mb-0.5">
+                        <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
+                      </p>
+                      <p class="text-xs text-green-700 line-clamp-2">{{ feedback.strengths }}</p>
+                    </div>
+                    <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-2 py-1">
+                      <p class="text-[10px] font-semibold text-amber-800 mb-0.5">
+                        <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
+                      </p>
+                      <p class="text-xs text-amber-700 line-clamp-2">{{ feedback.improvement_areas }}</p>
+                    </div>
+                    <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-2 py-1">
+                      <p class="text-[10px] font-semibold text-blue-800 mb-0.5">
+                        <i class="fa-solid fa-comment mr-1"></i>Comments
+                      </p>
+                      <p class="text-xs text-blue-700 line-clamp-2">{{ feedback.additional_comments }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- New Feedback Form Header -->
+            <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200">
+              <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle text-indigo-600"></i>
+                Provide New Feedback
+              </h3>
+              <p class="text-sm text-slate-600 mt-1">
+                Fill in the details below to provide performance feedback. This will create a new entry and all previous feedback will be preserved.
+              </p>
+            </div>
+
             <!-- Performance Ratings -->
             <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
               <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -2031,7 +2128,7 @@
                       class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl">
                 <i *ngIf="!isSubmittingFeedback" class="fa-solid fa-check mr-2"></i>
                 <i *ngIf="isSubmittingFeedback" class="fa-solid fa-spinner fa-spin mr-2"></i>
-                {{ isSubmittingFeedback ? 'Submitting...' : (existingFeedback ? 'Update Feedback' : 'Submit Feedback') }}
+                {{ isSubmittingFeedback ? 'Submitting...' : 'Submit Feedback' }}
               </button>
             </div>
             

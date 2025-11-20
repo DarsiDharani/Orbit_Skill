@@ -191,6 +191,9 @@ export class EngineerDashboardComponent implements OnInit {
   // Manager Performance Feedback
   managerFeedback: any[] = [];
   isLoadingFeedback: boolean = false;
+  showSkillFeedbackModal: boolean = false;
+  selectedSkillForFeedback: string = '';
+  skillFeedbackList: any[] = [];
   trainingSearch: string = '';
   trainingSkillFilter: string = 'All';
   trainingLevelFilter: string = 'All';
@@ -420,6 +423,9 @@ export class EngineerDashboardComponent implements OnInit {
           const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
           return dateB - dateA; // Descending order (newest first)
         });
+        // Debug: Log all feedback to verify backend is returning all entries
+        console.log('All manager feedback received:', this.managerFeedback);
+        console.log('Total feedback entries from backend:', this.managerFeedback.length);
         this.isLoadingFeedback = false;
       },
       error: (err) => {
@@ -459,6 +465,118 @@ export class EngineerDashboardComponent implements OnInit {
     const hoursDiff = (now.getTime() - updatedDate.getTime()) / (1000 * 60 * 60);
     // Show "Updated" badge if feedback was updated within last 24 hours
     return hoursDiff < 24 && feedback.updated_at !== feedback.created_at;
+  }
+
+  // Get feedback for a specific skill by matching training skill names
+  getFeedbackForSkill(skillName: string): any[] {
+    // Handle edge cases: empty skill name, no feedback data, or no trainings
+    if (!skillName || !skillName.trim()) {
+      return [];
+    }
+
+    // If no feedback has been loaded yet, return empty array
+    if (!this.managerFeedback || this.managerFeedback.length === 0) {
+      return [];
+    }
+
+    // If no trainings have been loaded yet, return empty array
+    if (!this.allTrainings || this.allTrainings.length === 0) {
+      return [];
+    }
+
+    // Find trainings that match this skill (case-insensitive, trimmed)
+    const skillNameLower = skillName.toLowerCase().trim();
+    const matchingTrainings = this.allTrainings.filter(t => {
+      if (!t || !t.skill) return false;
+      return t.skill.toLowerCase().trim() === skillNameLower;
+    });
+
+    if (matchingTrainings.length === 0) {
+      return [];
+    }
+
+    // Get training IDs for matching trainings
+    const trainingIds = matchingTrainings.map(t => t.id).filter(id => id != null);
+
+    if (trainingIds.length === 0) {
+      return [];
+    }
+
+    // Filter feedback where training_id matches
+    const filteredFeedback = this.managerFeedback.filter(feedback => {
+      if (!feedback || !feedback.training_id) return false;
+      return trainingIds.includes(feedback.training_id);
+    });
+
+    // Group feedback by training_id and add update numbers
+    const feedbackByTraining = new Map<number, any[]>();
+    filteredFeedback.forEach(feedback => {
+      const trainingId = feedback.training_id;
+      if (!feedbackByTraining.has(trainingId)) {
+        feedbackByTraining.set(trainingId, []);
+      }
+      feedbackByTraining.get(trainingId)!.push(feedback);
+    });
+
+    // Add update numbers to each feedback entry (1 = most recent, 2 = second most recent, etc.)
+    const enrichedFeedback: any[] = [];
+    feedbackByTraining.forEach((feedbackList, trainingId) => {
+      // Sort by updated_at descending (most recent first)
+      feedbackList.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      // Add update number and total updates count
+      feedbackList.forEach((feedback, index) => {
+        enrichedFeedback.push({
+          ...feedback,
+          updateNumber: index + 1,
+          totalUpdates: feedbackList.length
+        });
+      });
+    });
+
+    // Sort all feedback to keep same training together, with most recent training first
+    // Within each training, feedback is already sorted by update number (1 = most recent)
+    enrichedFeedback.sort((a, b) => {
+      // First, sort by training_id to keep same training together
+      if (a.training_id !== b.training_id) {
+        // Get the most recent date for each training to determine which training comes first
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        // If same training, maintain order; if different, most recent training first
+        return dateB - dateA;
+      }
+      // Within same training, sort by update number (1 = most recent)
+      return a.updateNumber - b.updateNumber;
+    });
+
+    return enrichedFeedback;
+  }
+
+  // Check if a skill has feedback available
+  hasFeedbackForSkill(skillName: string): boolean {
+    return this.getFeedbackForSkill(skillName).length > 0;
+  }
+
+  // Open feedback modal for a specific skill
+  openSkillFeedbackModal(skillName: string): void {
+    if (!skillName) return;
+    this.selectedSkillForFeedback = skillName;
+    this.skillFeedbackList = this.getFeedbackForSkill(skillName);
+    // Debug: Log all feedback entries to verify all are being returned
+    console.log(`Feedback for skill "${skillName}":`, this.skillFeedbackList);
+    console.log(`Total feedback entries: ${this.skillFeedbackList.length}`);
+    this.showSkillFeedbackModal = true;
+  }
+
+  // Close feedback modal
+  closeSkillFeedbackModal(): void {
+    this.showSkillFeedbackModal = false;
+    this.selectedSkillForFeedback = '';
+    this.skillFeedbackList = [];
   }
 
   // --- Calendar logic ---

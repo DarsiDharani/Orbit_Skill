@@ -147,6 +147,10 @@ export class ApiService {
     return this.getUrl(`/shared-content/manager/performance-feedback/${trainingId}/${employeeId}`);
   }
 
+  managerPerformanceFeedbackHistoryUrl(trainingId: number, employeeId: string): string {
+    return this.getUrl(`/shared-content/manager/performance-feedback/${trainingId}/${employeeId}/history`);
+  }
+
   get employeePerformanceFeedbackUrl(): string {
     return this.getUrl('/shared-content/employee/performance-feedback');
   }

@@ -1422,9 +1422,9 @@ async def create_or_update_performance_feedback(
     current_user: dict = Depends(get_current_active_manager)
 ):
     """
-    Create or update manager performance feedback for an employee's training.
-    If feedback already exists for this training-employee-manager combination, it will be updated.
-    Only the most recent feedback is kept (old ones are replaced).
+    Create manager performance feedback for an employee's training.
+    Each submission creates a new feedback entry to maintain complete history.
+    All previous feedback entries are preserved and visible to the employee.
     """
     manager_username = current_user.get("username")
     if not manager_username:
@@ -1480,15 +1480,6 @@ async def create_or_update_performance_feedback(
             detail="You can only provide feedback for trainings you assigned to this employee"
         )
 
-    # Check if feedback already exists
-    existing_feedback_stmt = select(models.ManagerPerformanceFeedback).where(
-        models.ManagerPerformanceFeedback.training_id == feedback_data.training_id,
-        models.ManagerPerformanceFeedback.employee_empid == feedback_data.employee_empid,
-        models.ManagerPerformanceFeedback.manager_empid == manager_username
-    )
-    existing_feedback_result = await db.execute(existing_feedback_stmt)
-    existing_feedback = existing_feedback_result.scalar_one_or_none()
-
     # Get training and employee details
     training_stmt = select(models.TrainingDetail).where(
         models.TrainingDetail.id == feedback_data.training_id
@@ -1515,74 +1506,42 @@ async def create_or_update_performance_feedback(
     # Store training_name before commit to avoid lazy-loading issues
     training_name = training.training_name
 
-    if existing_feedback:
-        # Update existing feedback
-        existing_feedback.knowledge_retention = feedback_data.knowledge_retention
-        existing_feedback.practical_application = feedback_data.practical_application
-        existing_feedback.engagement_level = feedback_data.engagement_level
-        existing_feedback.improvement_areas = feedback_data.improvement_areas
-        existing_feedback.strengths = feedback_data.strengths
-        existing_feedback.overall_performance = feedback_data.overall_performance
-        existing_feedback.additional_comments = feedback_data.additional_comments
-        existing_feedback.updated_at = datetime.utcnow()
-        
-        await db.commit()
-        await db.refresh(existing_feedback)
-        
-        return ManagerPerformanceFeedbackResponse(
-            id=existing_feedback.id,
-            training_id=existing_feedback.training_id,
-            training_name=training_name,
-            employee_empid=existing_feedback.employee_empid,
-            employee_name=employee_name,
-            manager_empid=existing_feedback.manager_empid,
-            manager_name=manager_name,
-            knowledge_retention=existing_feedback.knowledge_retention,
-            practical_application=existing_feedback.practical_application,
-            engagement_level=existing_feedback.engagement_level,
-            improvement_areas=existing_feedback.improvement_areas,
-            strengths=existing_feedback.strengths,
-            overall_performance=existing_feedback.overall_performance,
-            additional_comments=existing_feedback.additional_comments,
-            created_at=existing_feedback.created_at,
-            updated_at=existing_feedback.updated_at
-        )
-    else:
-        # Create new feedback
-        new_feedback = models.ManagerPerformanceFeedback(
-            training_id=feedback_data.training_id,
-            employee_empid=feedback_data.employee_empid,
-            manager_empid=manager_username,
-            knowledge_retention=feedback_data.knowledge_retention,
-            practical_application=feedback_data.practical_application,
-            engagement_level=feedback_data.engagement_level,
-            improvement_areas=feedback_data.improvement_areas,
-            strengths=feedback_data.strengths,
-            overall_performance=feedback_data.overall_performance,
-            additional_comments=feedback_data.additional_comments
-        )
-        db.add(new_feedback)
-        await db.commit()
-        await db.refresh(new_feedback)
-        
-        return ManagerPerformanceFeedbackResponse(
-            id=new_feedback.id,
-            training_id=new_feedback.training_id,
-            training_name=training_name,
-            employee_empid=new_feedback.employee_empid,
-            employee_name=employee_name,
-            manager_empid=new_feedback.manager_empid,
-            manager_name=manager_name,
-            knowledge_retention=new_feedback.knowledge_retention,
-            practical_application=new_feedback.practical_application,
-            engagement_level=new_feedback.engagement_level,
-            improvement_areas=new_feedback.improvement_areas,
-            strengths=new_feedback.strengths,
-            overall_performance=new_feedback.overall_performance,
-            additional_comments=new_feedback.additional_comments,
-            created_at=new_feedback.created_at,
-            updated_at=new_feedback.updated_at
-        )
+    # Always create a new feedback entry to maintain history
+    # This allows employees to see all previous feedback updates
+    new_feedback = models.ManagerPerformanceFeedback(
+        training_id=feedback_data.training_id,
+        employee_empid=feedback_data.employee_empid,
+        manager_empid=manager_username,
+        knowledge_retention=feedback_data.knowledge_retention,
+        practical_application=feedback_data.practical_application,
+        engagement_level=feedback_data.engagement_level,
+        improvement_areas=feedback_data.improvement_areas,
+        strengths=feedback_data.strengths,
+        overall_performance=feedback_data.overall_performance,
+        additional_comments=feedback_data.additional_comments
+    )
+    db.add(new_feedback)
+    await db.commit()
+    await db.refresh(new_feedback)
+    
+    return ManagerPerformanceFeedbackResponse(
+        id=new_feedback.id,
+        training_id=new_feedback.training_id,
+        training_name=training_name,
+        employee_empid=new_feedback.employee_empid,
+        employee_name=employee_name,
+        manager_empid=new_feedback.manager_empid,
+        manager_name=manager_name,
+        knowledge_retention=new_feedback.knowledge_retention,
+        practical_application=new_feedback.practical_application,
+        engagement_level=new_feedback.engagement_level,
+        improvement_areas=new_feedback.improvement_areas,
+        strengths=new_feedback.strengths,
+        overall_performance=new_feedback.overall_performance,
+        additional_comments=new_feedback.additional_comments,
+        created_at=new_feedback.created_at,
+        updated_at=new_feedback.updated_at
+    )
 
 @router.get("/manager/performance-feedback/{training_id}/{employee_empid}", response_model=Optional[ManagerPerformanceFeedbackResponse])
 async def get_performance_feedback(
@@ -1659,13 +1618,93 @@ async def get_performance_feedback(
         updated_at=feedback.updated_at
     )
 
+@router.get("/manager/performance-feedback/{training_id}/{employee_empid}/history", response_model=List[ManagerPerformanceFeedbackResponse])
+async def get_performance_feedback_history(
+    training_id: int,
+    employee_empid: str,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_manager)
+):
+    """
+    Get all performance feedback history for a specific employee's training (all entries, not just latest).
+    """
+    manager_username = current_user.get("username")
+    if not manager_username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+    # Verify the employee is managed by this manager
+    manager_relation_stmt = select(models.ManagerEmployee).where(
+        models.ManagerEmployee.manager_empid == manager_username,
+        models.ManagerEmployee.employee_empid == employee_empid
+    )
+    manager_relation_result = await db.execute(manager_relation_stmt)
+    manager_relation = manager_relation_result.scalar_one_or_none()
+    
+    if not manager_relation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view feedback for employees in your team"
+        )
+
+    # Get all feedback entries for this training-employee combination
+    feedback_stmt = select(
+        models.ManagerPerformanceFeedback,
+        models.TrainingDetail
+    ).join(
+        models.TrainingDetail, models.ManagerPerformanceFeedback.training_id == models.TrainingDetail.id
+    ).where(
+        models.ManagerPerformanceFeedback.training_id == training_id,
+        models.ManagerPerformanceFeedback.employee_empid == employee_empid,
+        models.ManagerPerformanceFeedback.manager_empid == manager_username
+    ).order_by(models.ManagerPerformanceFeedback.updated_at.desc())
+    
+    feedback_result = await db.execute(feedback_stmt)
+    all_feedback = feedback_result.all()
+    
+    if not all_feedback:
+        return []
+    
+    # Get manager name
+    manager_name_stmt = select(models.ManagerEmployee.manager_name).where(
+        models.ManagerEmployee.manager_empid == manager_username
+    ).limit(1)
+    manager_name_result = await db.execute(manager_name_stmt)
+    manager_name_row = manager_name_result.first()
+    manager_name = manager_name_row[0] if manager_name_row and manager_name_row[0] else manager_username
+
+    result = []
+    for feedback, training in all_feedback:
+        result.append(ManagerPerformanceFeedbackResponse(
+            id=feedback.id,
+            training_id=feedback.training_id,
+            training_name=training.training_name,
+            employee_empid=feedback.employee_empid,
+            employee_name=manager_relation.employee_name,
+            manager_empid=feedback.manager_empid,
+            manager_name=manager_name,
+            knowledge_retention=feedback.knowledge_retention,
+            practical_application=feedback.practical_application,
+            engagement_level=feedback.engagement_level,
+            improvement_areas=feedback.improvement_areas,
+            strengths=feedback.strengths,
+            overall_performance=feedback.overall_performance,
+            additional_comments=feedback.additional_comments,
+            created_at=feedback.created_at,
+            updated_at=feedback.updated_at
+        ))
+    
+    return result
+
 @router.get("/employee/performance-feedback", response_model=List[ManagerPerformanceFeedbackResponse])
 async def get_employee_performance_feedback(
     db: AsyncSession = Depends(get_db_async),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
-    Get all performance feedback for the current employee (only the latest feedback per training).
+    Get all performance feedback history for the current employee (all feedback entries, not just latest).
     """
     employee_username = current_user.get("username")
     if not employee_username:
@@ -1674,8 +1713,8 @@ async def get_employee_performance_feedback(
             detail="Could not validate credentials"
         )
 
-    # Get all feedback for this employee, grouped by training_id and ordered by updated_at
-    # We'll get the latest feedback for each training
+    # Get all feedback for this employee, ordered by updated_at (most recent first)
+    # This returns ALL feedback entries, not just the latest per training
     feedback_stmt = select(
         models.ManagerPerformanceFeedback,
         models.TrainingDetail,
@@ -1690,21 +1729,15 @@ async def get_employee_performance_feedback(
     ).where(
         models.ManagerPerformanceFeedback.employee_empid == employee_username
     ).order_by(
-        models.ManagerPerformanceFeedback.training_id,
         models.ManagerPerformanceFeedback.updated_at.desc()
     )
     
     feedback_result = await db.execute(feedback_stmt)
     all_feedback = feedback_result.all()
     
-    # Group by training_id and keep only the latest for each
-    latest_feedback_map = {}
-    for feedback, training, manager_name, employee_name in all_feedback:
-        if feedback.training_id not in latest_feedback_map:
-            latest_feedback_map[feedback.training_id] = (feedback, training, manager_name, employee_name)
-    
+    # Return all feedback entries (not just latest)
     result = []
-    for training_id, (feedback, training, manager_name, employee_name) in latest_feedback_map.items():
+    for feedback, training, manager_name, employee_name in all_feedback:
         result.append(ManagerPerformanceFeedbackResponse(
             id=feedback.id,
             training_id=feedback.training_id,
@@ -1723,9 +1756,6 @@ async def get_employee_performance_feedback(
             created_at=feedback.created_at,
             updated_at=feedback.updated_at
         ))
-    
-    # Sort by updated_at descending (most recent first)
-    result.sort(key=lambda x: x.updated_at, reverse=True)
     
     return result
 
