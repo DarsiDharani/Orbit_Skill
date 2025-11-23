@@ -194,6 +194,11 @@ export class EngineerDashboardComponent implements OnInit {
   showSkillFeedbackModal: boolean = false;
   selectedSkillForFeedback: string = '';
   skillFeedbackList: any[] = [];
+  skillFeedbackByType: Map<string, any[]> = new Map(); // Grouped by skill type (L1-L5)
+  showFeedbackHistoryModal: boolean = false;
+  selectedSkillTypeForHistory: string = '';
+  selectedSkillNameForHistory: string = '';
+  feedbackHistoryList: any[] = [];
   trainingSearch: string = '';
   trainingSkillFilter: string = 'All';
   trainingLevelFilter: string = 'All';
@@ -230,6 +235,21 @@ export class EngineerDashboardComponent implements OnInit {
   sharedFeedback: Map<number, boolean> = new Map(); // Track which trainings have feedback shared
   assignmentSharedBy: Map<number, string> = new Map(); // Track who shared the assignment
   feedbackSharedBy: Map<number, string> = new Map(); // Track who shared the feedback
+  trainingCandidates: Map<number, {employee_empid: string, employee_name: string, attended: boolean}[]> = new Map(); // Store candidates for each training
+  showAttendanceModal: boolean = false;
+  selectedTrainingForAttendance: number | null = null;
+  attendanceCandidates: {employee_empid: string, employee_name: string, attended: boolean}[] = [];
+  isMarkingAttendance: boolean = false;
+  
+  // Attendance success popup
+  showAttendanceSuccessPopup: boolean = false;
+  attendanceSuccessData: {
+    trainingName: string;
+    attendedCount: number;
+    absentCount: number;
+    totalCount: number;
+    attendedNames: string;
+  } | null = null;
   newTraining = {
     division: '',
     department: '',
@@ -521,11 +541,28 @@ export class EngineerDashboardComponent implements OnInit {
       return [];
     }
 
-    // Filter feedback where training_id matches
-    const filteredFeedback = this.managerFeedback.filter(feedback => {
-      if (!feedback || !feedback.training_id) return false;
-      return trainingIds.includes(feedback.training_id);
+    // Create a map of training_id to training for quick lookup
+    const trainingMap = new Map<number, any>();
+    matchingTrainings.forEach(t => {
+      if (t.id != null) {
+        trainingMap.set(t.id, t);
+      }
     });
+
+    // Filter feedback where training_id matches and enrich with training info
+    const filteredFeedback = this.managerFeedback
+      .filter(feedback => {
+        if (!feedback || !feedback.training_id) return false;
+        return trainingIds.includes(feedback.training_id);
+      })
+      .map(feedback => {
+        const training = trainingMap.get(feedback.training_id);
+        return {
+          ...feedback,
+          skill_category: training?.skill_category || null,
+          training_name: training?.training_name || feedback.training_name
+        };
+      });
 
     // Debug: Log filtered feedback information
     console.log(`Filtered feedback for skill "${skillName}" (training IDs: ${trainingIds.join(', ')}):`, filteredFeedback.length, 'entries');
@@ -533,6 +570,7 @@ export class EngineerDashboardComponent implements OnInit {
       console.log(`  Feedback ${idx + 1}:`, {
         training_id: fb.training_id,
         training_name: fb.training_name,
+        skill_category: fb.skill_category,
         has_improvement_areas: !!fb.improvement_areas,
         has_strengths: !!fb.strengths,
         has_additional_comments: !!fb.additional_comments
@@ -608,32 +646,108 @@ export class EngineerDashboardComponent implements OnInit {
     return this.getFeedbackForSkill(skillName).length > 0;
   }
 
+  // Group feedback by skill type (L1-L5)
+  groupFeedbackBySkillType(feedbackList: any[]): Map<string, any[]> {
+    const grouped = new Map<string, any[]>();
+    
+    feedbackList.forEach(feedback => {
+      // Get skill category (L1, L2, L3, L4, L5) or default to 'Unknown'
+      const skillType = feedback.skill_category || 'Unknown';
+      
+      if (!grouped.has(skillType)) {
+        grouped.set(skillType, []);
+      }
+      grouped.get(skillType)!.push(feedback);
+    });
+    
+    // Sort feedback within each group by updated_at (most recent first)
+    grouped.forEach((feedbackList, skillType) => {
+      feedbackList.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+    });
+    
+    return grouped;
+  }
+
+  // Get latest feedback for a skill type
+  getLatestFeedbackForType(feedbackList: any[]): any | null {
+    if (!feedbackList || feedbackList.length === 0) return null;
+    
+    // List is already sorted by updated_at descending
+    return feedbackList[0];
+  }
+
+  // Get skill type entries as array for template iteration
+  getSkillTypeEntries(): Array<{key: string, value: any[]}> {
+    return Array.from(this.skillFeedbackByType.entries()).map(([key, value]) => ({
+      key,
+      value
+    }));
+  }
+
+  // Get skill type display name
+  getSkillTypeDisplayName(skillType: string): string {
+    const typeMap: { [key: string]: string } = {
+      'L1': 'Beginner',
+      'L2': 'Basic',
+      'L3': 'Intermediate',
+      'L4': 'Advanced',
+      'L5': 'Expert'
+    };
+    return typeMap[skillType] || skillType;
+  }
+
   // Open feedback modal for a specific skill
   openSkillFeedbackModal(skillName: string): void {
     if (!skillName) return;
     this.selectedSkillForFeedback = skillName;
     this.skillFeedbackList = this.getFeedbackForSkill(skillName);
+    
+    // Group feedback by skill type
+    this.skillFeedbackByType = this.groupFeedbackBySkillType(this.skillFeedbackList);
+    
     // Debug: Log all feedback entries to verify all are being returned with complete data
     console.log(`Feedback for skill "${skillName}":`, this.skillFeedbackList);
     console.log(`Total feedback entries: ${this.skillFeedbackList.length}`);
-    // Log detailed information about each feedback entry's text fields
-    this.skillFeedbackList.forEach((fb, index) => {
-      console.log(`Skill Feedback Entry ${index + 1} for "${skillName}":`, {
-        training_name: fb.training_name,
-        training_id: fb.training_id,
-        improvement_areas: fb.improvement_areas,
-        improvement_areas_present: !!fb.improvement_areas,
-        improvement_areas_length: fb.improvement_areas?.length || 0,
-        strengths: fb.strengths,
-        strengths_present: !!fb.strengths,
-        strengths_length: fb.strengths?.length || 0,
-        additional_comments: fb.additional_comments,
-        additional_comments_present: !!fb.additional_comments,
-        additional_comments_length: fb.additional_comments?.length || 0,
-        overall_performance: fb.overall_performance
-      });
-    });
+    console.log(`Grouped by type:`, Array.from(this.skillFeedbackByType.entries()).map(([type, list]) => ({
+      type,
+      count: list.length
+    })));
+    
     this.showSkillFeedbackModal = true;
+  }
+
+  // Open history modal for a specific skill type
+  openFeedbackHistoryModal(skillName: string, skillType: string): void {
+    if (!skillName || !skillType) return;
+    this.selectedSkillNameForHistory = skillName;
+    this.selectedSkillTypeForHistory = skillType;
+    
+    // Get all feedback for this skill type
+    const allFeedback = this.getFeedbackForSkill(skillName);
+    this.feedbackHistoryList = allFeedback.filter(fb => 
+      (fb.skill_category || 'Unknown') === skillType
+    );
+    
+    // Sort by updated_at descending (most recent first)
+    this.feedbackHistoryList.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+    
+    this.showFeedbackHistoryModal = true;
+  }
+
+  // Close feedback history modal
+  closeFeedbackHistoryModal(): void {
+    this.showFeedbackHistoryModal = false;
+    this.selectedSkillTypeForHistory = '';
+    this.selectedSkillNameForHistory = '';
+    this.feedbackHistoryList = [];
   }
 
   // Close feedback modal
@@ -990,6 +1104,145 @@ export class EngineerDashboardComponent implements OnInit {
     return this.assignmentSharedBy.get(trainingId) || '';
   }
 
+  fetchTrainingCandidates(trainingId: number): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    this.http.get<{employee_empid: string, employee_name: string, attended: boolean}[]>(
+      this.apiService.getTrainingCandidatesUrl(trainingId), 
+      { headers }
+    ).subscribe({
+      next: (candidates) => {
+        this.trainingCandidates.set(trainingId, candidates);
+      },
+      error: (err) => {
+        // If 401, token expired - redirect to login
+        if (err.status === 401) {
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else if (err.status !== 403) {
+          // If 403, user is not the trainer - that's okay, just don't show candidates
+          console.error('Failed to fetch training candidates:', err);
+        }
+        this.trainingCandidates.set(trainingId, []);
+      }
+    });
+  }
+
+  getTrainingCandidates(trainingId: number): {employee_empid: string, employee_name: string, attended: boolean}[] {
+    return this.trainingCandidates.get(trainingId) || [];
+  }
+
+  openAttendanceModal(trainingId: number): void {
+    this.selectedTrainingForAttendance = trainingId;
+    const candidates = this.getTrainingCandidates(trainingId);
+    // Create a copy for editing
+    this.attendanceCandidates = candidates.map(c => ({ ...c }));
+    this.showAttendanceModal = true;
+  }
+
+  closeAttendanceModal(): void {
+    this.showAttendanceModal = false;
+    this.selectedTrainingForAttendance = null;
+    this.attendanceCandidates = [];
+  }
+  
+  closeAttendanceSuccessPopup(): void {
+    this.showAttendanceSuccessPopup = false;
+    this.attendanceSuccessData = null;
+  }
+
+  toggleCandidateAttendance(index: number): void {
+    this.attendanceCandidates[index].attended = !this.attendanceCandidates[index].attended;
+  }
+
+  getAttendedCount(): number {
+    return this.attendanceCandidates.filter(c => c.attended).length;
+  }
+
+  getTotalCandidatesCount(): number {
+    return this.attendanceCandidates.length;
+  }
+
+  canMarkAttendance(): boolean {
+    return !this.isMarkingAttendance && this.getAttendedCount() > 0;
+  }
+
+  markAttendance(): void {
+    if (!this.selectedTrainingForAttendance) return;
+    
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.error('Authentication token missing. Please login again.');
+      return;
+    }
+    
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const attendedEmpids = this.attendanceCandidates
+      .filter(c => c.attended)
+      .map(c => c.employee_empid);
+    
+    this.isMarkingAttendance = true;
+    
+    // Get attended candidate names for better success message
+    const attendedNames = this.attendanceCandidates
+      .filter(c => c.attended)
+      .map(c => c.employee_name)
+      .join(', ');
+    
+    this.http.post(
+      this.apiService.markTrainingAttendanceUrl(this.selectedTrainingForAttendance),
+      { candidate_empids: attendedEmpids },
+      { headers }
+    ).subscribe({
+      next: (response: any) => {
+        // Show immediate success popup with detailed information
+        // Find the training object from the ID
+        const training = this.allTrainings.find(t => t.id === this.selectedTrainingForAttendance);
+        const trainingName = training?.training_name || 'Training';
+        const attendedCount = response.attended_count || attendedEmpids.length;
+        const totalCount = response.total_assigned || this.attendanceCandidates.length;
+        const absentCount = totalCount - attendedCount;
+        
+        // Prepare data for success popup
+        this.attendanceSuccessData = {
+          trainingName: trainingName,
+          attendedCount: attendedCount,
+          absentCount: absentCount,
+          totalCount: totalCount,
+          attendedNames: attendedNames || ''
+        };
+        
+        // Close attendance modal first
+        this.closeAttendanceModal();
+        
+        // Show success popup in the center
+        this.showAttendanceSuccessPopup = true;
+        
+        // Refresh candidates list immediately
+        this.fetchTrainingCandidates(this.selectedTrainingForAttendance!);
+      },
+      error: (err) => {
+        console.error('Failed to mark attendance:', err);
+        if (err.status === 401) {
+          this.toastService.error('Your session has expired. Please log in again.');
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else if (err.status === 403) {
+          this.toastService.error('Only the trainer of this training can mark attendance.');
+        } else if (err.status === 400) {
+          this.toastService.error(err.error?.detail || 'Invalid request. Please check the selected candidates.');
+        } else {
+          this.toastService.error('Failed to mark attendance. Please try again.');
+        }
+      },
+      complete: () => {
+        this.isMarkingAttendance = false;
+      }
+    });
+  }
+
   getFeedbackSharedBy(trainingId: number): string {
     return this.feedbackSharedBy.get(trainingId) || '';
   }
@@ -1086,9 +1339,10 @@ export class EngineerDashboardComponent implements OnInit {
     // Update cache
     this._myTrainingsCache = filtered;
     this._myTrainingsCacheKey = cacheKey;
-    // Check shared status for all trainings
+    // Check shared status for all trainings and fetch candidates
     filtered.forEach(training => {
       this.checkSharedStatus(training.id);
+      this.fetchTrainingCandidates(training.id);
     });
     
     return filtered;
@@ -2263,23 +2517,59 @@ export class EngineerDashboardComponent implements OnInit {
   }
 
   getSkillProgress(competency: Skill | ModalSkill): number {
-    const extractLevel = (level: string): number => {
-      if (!level) return 0;
-      if (level.toUpperCase().startsWith('L')) {
-        return parseInt(level.substring(1), 10) || 0;
+    // Calculate progress based on average overall performance across L1-L5 levels
+    const skillName = competency.skill;
+    if (!skillName) return 0;
+
+    // Get all feedback for this skill
+    const feedbackList = this.getFeedbackForSkill(skillName);
+    if (!feedbackList || feedbackList.length === 0) return 0;
+
+    // Group feedback by skill category (L1, L2, L3, L4, L5)
+    const feedbackByLevel = new Map<string, any[]>();
+    feedbackList.forEach(feedback => {
+      const skillCategory = feedback.skill_category || 'Unknown';
+      if (skillCategory.startsWith('L') && ['L1', 'L2', 'L3', 'L4', 'L5'].includes(skillCategory)) {
+        if (!feedbackByLevel.has(skillCategory)) {
+          feedbackByLevel.set(skillCategory, []);
+        }
+        feedbackByLevel.get(skillCategory)!.push(feedback);
       }
-      const levelMap: { [key: string]: number } = {
-        'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4
-      };
-      return levelMap[level.toUpperCase()] || 0;
-    };
+    });
 
-    const current = extractLevel(competency.current_expertise || '0');
-    const target = extractLevel(competency.target_expertise || '1');
+    // Sort feedback within each level by updated_at (most recent first)
+    feedbackByLevel.forEach((feedbackList, level) => {
+      feedbackList.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+    });
 
-    if (target === 0) return 0;
+    // Get latest overall_performance for each level (L1-L5)
+    const performanceScores: number[] = [];
+    const levels = ['L1', 'L2', 'L3', 'L4', 'L5'];
+    
+    levels.forEach(level => {
+      const levelFeedback = feedbackByLevel.get(level);
+      if (levelFeedback && levelFeedback.length > 0) {
+        const latestFeedback = levelFeedback[0];
+        if (latestFeedback.overall_performance != null && latestFeedback.overall_performance > 0) {
+          performanceScores.push(latestFeedback.overall_performance);
+        }
+      }
+    });
 
-    let percent = Math.round((current / target) * 100);
+    // If no performance scores found, return 0
+    if (performanceScores.length === 0) return 0;
+
+    // Calculate average of overall performance scores
+    const sum = performanceScores.reduce((acc, score) => acc + score, 0);
+    const average = sum / performanceScores.length;
+
+    // Convert to percentage: (average/5) * 100
+    // Since overall_performance is on a 1-5 scale, we convert it to percentage
+    let percent = Math.round((average / 5) * 100);
     if (percent > 100) percent = 100;
     if (percent < 0) percent = 0;
     return percent;

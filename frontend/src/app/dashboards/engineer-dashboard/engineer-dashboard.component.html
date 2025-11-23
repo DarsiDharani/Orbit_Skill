@@ -1218,19 +1218,38 @@
                                     <div *ngIf="training.training_topics" class="text-[10px] text-slate-600 pt-1 line-clamp-2">
                                         {{ training.training_topics }}
                                     </div>
-                                    <div class="mt-auto pt-2 border-t border-slate-200/80 flex items-center gap-2">
-                                        <button *ngIf="!isAssignmentShared(training.id)" (click)="openShareAssignment(training.id)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
-                                            <i class="fa-solid fa-file-lines mr-1.5"></i>Share Assignment
+                                    <!-- Candidates List -->
+                                    <div *ngIf="getTrainingCandidates(training.id).length > 0" class="pt-2 border-t border-slate-200/80">
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-[10px] font-semibold text-slate-700">
+                                                <i class="fa-solid fa-users mr-1"></i>Candidates ({{ getTrainingCandidates(training.id).length }})
+                                            </span>
+                                        </div>
+                                        <div class="max-h-20 overflow-y-auto space-y-1">
+                                            <div *ngFor="let candidate of getTrainingCandidates(training.id)" class="flex items-center gap-1.5 text-[10px]">
+                                                <i [ngClass]="candidate.attended ? 'fa-solid fa-check-circle text-green-600' : 'fa-solid fa-circle text-slate-400'" class="text-xs"></i>
+                                                <span [ngClass]="candidate.attended ? 'text-slate-800 font-medium' : 'text-slate-500'">{{ candidate.employee_name || candidate.employee_empid }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-auto pt-2 border-t border-slate-200/80 flex flex-col gap-2">
+                                        <button (click)="openAttendanceModal(training.id)" class="w-full bg-emerald-500 text-white font-semibold py-1 rounded-lg hover:bg-emerald-700 transition-colors duration-200 text-xs">
+                                            <i class="fa-solid fa-clipboard-check mr-1.5"></i>Mark Attendance
                                         </button>
-                                        <button *ngIf="isAssignmentShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
-                                            <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
-                                        </button>
-                                        <button *ngIf="!isFeedbackShared(training.id)" (click)="openShareFeedback(training.id)" class="flex-1 bg-amber-500 text-white font-semibold py-1 rounded-lg hover:bg-amber-700 transition-colors duration-200 text-xs">
-                                            <i class="fa-solid fa-comment-dots mr-1.5"></i>Share Feedback
-                                        </button>
-                                        <button *ngIf="isFeedbackShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
-                                            <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
-                                        </button>
+                                        <div class="flex items-center gap-2">
+                                            <button *ngIf="!isAssignmentShared(training.id)" (click)="openShareAssignment(training.id)" class="flex-1 bg-violet-500 text-white font-semibold py-1 rounded-lg hover:bg-violet-700 transition-colors duration-200 text-xs">
+                                                <i class="fa-solid fa-file-lines mr-1.5"></i>Share Assignment
+                                            </button>
+                                            <button *ngIf="isAssignmentShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                                <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
+                                            </button>
+                                            <button *ngIf="!isFeedbackShared(training.id)" (click)="openShareFeedback(training.id)" class="flex-1 bg-amber-500 text-white font-semibold py-1 rounded-lg hover:bg-amber-700 transition-colors duration-200 text-xs">
+                                                <i class="fa-solid fa-comment-dots mr-1.5"></i>Share Feedback
+                                            </button>
+                                            <button *ngIf="isFeedbackShared(training.id)" disabled class="flex-1 bg-slate-400 text-white font-semibold py-1 rounded-lg cursor-not-allowed transition-colors duration-200 text-xs">
+                                                <i class="fa-solid fa-check-circle mr-1.5"></i>Shared
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1618,6 +1637,149 @@
   </div>
 </div>
 
+<!-- Attendance Marking Modal -->
+<div *ngIf="showAttendanceModal" @fadeIn
+  class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+  <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl m-4" (click)="$event.stopPropagation()">
+    <div class="flex items-center justify-between p-6 bg-emerald-50 rounded-t-2xl border-b border-emerald-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center">
+          <i class="fa-solid fa-clipboard-check text-2xl"></i>
+        </div>
+        <div>
+          <h3 class="text-xl font-bold text-slate-900">Mark Training Attendance</h3>
+          <p class="text-sm text-slate-600">Select candidates who attended the training</p>
+        </div>
+      </div>
+      <button (click)="closeAttendanceModal()" class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-times text-lg"></i>
+      </button>
+    </div>
+    <div class="max-h-[70vh] overflow-y-auto p-6">
+      <div *ngIf="attendanceCandidates.length === 0" class="text-center py-12 text-slate-500">
+        <i class="fa-solid fa-users-slash text-4xl text-slate-400 mb-3"></i>
+        <p class="text-lg font-semibold text-slate-700 mb-2">No Candidates Assigned</p>
+        <p class="text-sm text-slate-500">No candidates have been assigned to this training yet.</p>
+      </div>
+      <div *ngIf="attendanceCandidates.length > 0" class="space-y-3">
+        <div class="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <p class="text-sm text-slate-700">
+            <i class="fa-solid fa-info-circle mr-2 text-sky-500"></i>
+            Select all candidates who attended the training. Only selected candidates will receive assignments.
+          </p>
+        </div>
+        <div *ngFor="let candidate of attendanceCandidates; let i = index" 
+             (click)="toggleCandidateAttendance(i)"
+             class="flex items-center gap-3 p-4 bg-white rounded-lg border-2 cursor-pointer transition-all hover:shadow-md"
+             [ngClass]="{
+               'border-emerald-500 bg-emerald-50': candidate.attended,
+               'border-slate-200 hover:border-slate-300': !candidate.attended
+             }">
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                 [ngClass]="{
+                   'bg-emerald-100 text-emerald-600': candidate.attended,
+                   'bg-slate-100 text-slate-400': !candidate.attended
+                 }">
+              <i [ngClass]="candidate.attended ? 'fa-solid fa-check' : 'fa-solid fa-user'" class="text-lg"></i>
+            </div>
+          </div>
+          <div class="flex-grow">
+            <p class="font-semibold text-slate-900">{{ candidate.employee_name || candidate.employee_empid }}</p>
+            <p class="text-xs text-slate-500">ID: {{ candidate.employee_empid }}</p>
+          </div>
+          <div class="flex-shrink-0">
+            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
+                 [ngClass]="{
+                   'border-emerald-500 bg-emerald-500': candidate.attended,
+                   'border-slate-300': !candidate.attended
+                 }">
+              <i *ngIf="candidate.attended" class="fa-solid fa-check text-white text-xs"></i>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <p class="text-sm text-blue-800">
+            <i class="fa-solid fa-check-circle mr-2"></i>
+            <strong>{{ getAttendedCount() }}</strong> out of 
+            <strong>{{ getTotalCandidatesCount() }}</strong> candidates selected
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-slate-200 px-6 pb-6">
+      <button (click)="closeAttendanceModal()" 
+              class="px-6 py-2.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+        Cancel
+      </button>
+      <button (click)="markAttendance()" 
+              [disabled]="!canMarkAttendance()"
+              class="px-7 py-2.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-emerald-300 transition-all">
+        <i class="fa-solid fa-check mr-2"></i>
+        <span *ngIf="!isMarkingAttendance">Mark Attendance</span>
+        <span *ngIf="isMarkingAttendance">Marking...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Attendance Success Popup Modal -->
+<div *ngIf="showAttendanceSuccessPopup && attendanceSuccessData" @modalScale class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" (click)="closeAttendanceSuccessPopup()">
+  <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full transform transition-all border-2 border-green-200" (click)="$event.stopPropagation()">
+    <!-- Header with gradient -->
+    <div class="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-3xl px-6 py-5">
+      <div class="flex items-center justify-center mb-2">
+        <div class="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border-4 border-white/30">
+          <i class="fa-solid fa-check-circle text-white text-4xl"></i>
+        </div>
+      </div>
+      <h3 class="text-2xl font-bold text-white text-center">Attendance Saved!</h3>
+    </div>
+    
+    <!-- Content -->
+    <div class="p-6 space-y-4">
+      <div class="text-center">
+        <p class="text-lg font-semibold text-slate-800 mb-1">{{ attendanceSuccessData.trainingName }}</p>
+        <p class="text-sm text-slate-500">Attendance has been marked successfully</p>
+      </div>
+      
+      <!-- Statistics Cards -->
+      <div class="grid grid-cols-3 gap-3 mt-4">
+        <div class="bg-green-50 rounded-xl p-4 text-center border-2 border-green-200">
+          <div class="text-2xl font-bold text-green-700">{{ attendanceSuccessData.attendedCount }}</div>
+          <div class="text-xs font-medium text-green-600 mt-1">Attended</div>
+        </div>
+        <div class="bg-red-50 rounded-xl p-4 text-center border-2 border-red-200">
+          <div class="text-2xl font-bold text-red-700">{{ attendanceSuccessData.absentCount }}</div>
+          <div class="text-xs font-medium text-red-600 mt-1">Absent</div>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-4 text-center border-2 border-blue-200">
+          <div class="text-2xl font-bold text-blue-700">{{ attendanceSuccessData.totalCount }}</div>
+          <div class="text-xs font-medium text-blue-600 mt-1">Total</div>
+        </div>
+      </div>
+      
+      <!-- Attended Candidates List -->
+      <div *ngIf="attendanceSuccessData.attendedNames" class="mt-4 pt-4 border-t border-slate-200">
+        <p class="text-sm font-semibold text-slate-700 mb-2">
+          <i class="fa-solid fa-users mr-2 text-green-600"></i>Attended Candidates:
+        </p>
+        <p class="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+          {{ attendanceSuccessData.attendedNames }}
+        </p>
+      </div>
+    </div>
+    
+    <!-- Footer Button -->
+    <div class="px-6 pb-6">
+      <button (click)="closeAttendanceSuccessPopup()" 
+              class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]">
+        <i class="fa-solid fa-check mr-2"></i>Got it!
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Assignment View Modal (for trainers/viewing only) -->
 <div *ngIf="showAssignmentModal" @fadeIn
     class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -1933,121 +2095,252 @@
             </div>
         </div>
         <div class="flex-1 overflow-y-auto p-6">
-            <div *ngIf="skillFeedbackList.length > 0" class="space-y-4">
-                <ng-container *ngFor="let feedback of skillFeedbackList; let i = index">
-                    <!-- Training Group Header - Show when starting a new training or first entry -->
-                    <div *ngIf="i === 0 || skillFeedbackList[i-1].training_id !== feedback.training_id" 
-                         class="mb-3 pb-2 border-b-2 border-indigo-200">
-                        <div class="flex items-center justify-between">
-                            <h5 class="text-sm font-bold text-indigo-900">
-                                <i class="fa-solid fa-graduation-cap mr-2"></i>{{ feedback.training_name }}
-                            </h5>
-                            <span *ngIf="feedback.totalUpdates > 1" 
-                                  class="px-2 py-1 text-[10px] font-semibold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
-                                {{ feedback.totalUpdates }} Feedback Entries
-                            </span>
-                        </div>
-                    </div>
-                    <!-- Training Group Separator for different trainings -->
-                    <div *ngIf="i > 0 && skillFeedbackList[i-1].training_id !== feedback.training_id" 
-                         class="border-t-2 border-indigo-300 my-6 pt-4">
-                        <p class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
-                            <i class="fa-solid fa-arrow-down mr-2"></i>Previous Training Feedback
-                        </p>
-                    </div>
-                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200 hover:shadow-md transition-all relative"
-                         [ngClass]="{
-                           'mt-2': i > 0 && skillFeedbackList[i-1].training_id === feedback.training_id, 
-                           'mt-6': i > 0 && skillFeedbackList[i-1].training_id !== feedback.training_id,
-                           'border-l-4 border-l-purple-500': feedback.updateNumber > 1 && feedback.totalUpdates > 1,
-                           'border-l-4 border-l-green-500': feedback.updateNumber === 1 && feedback.totalUpdates > 1
-                         }">
-                    <div class="flex items-start justify-between gap-2 mb-3">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2 mb-1 flex-wrap">
-                                <h4 class="font-bold text-slate-900 text-sm truncate">{{ feedback.training_name }}</h4>
-                                <span *ngIf="feedback.totalUpdates > 1" 
-                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300 flex-shrink-0"
-                                      [title]="'Update ' + feedback.updateNumber + ' of ' + feedback.totalUpdates">
-                                    <i class="fa-solid fa-history mr-1"></i>Update {{ feedback.updateNumber }}/{{ feedback.totalUpdates }}
-                                </span>
-                                <span *ngIf="feedback.updateNumber === 1 && feedback.totalUpdates > 1" 
-                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
-                                      title="Latest update">
-                                    <i class="fa-solid fa-star mr-1"></i>Latest
-                                </span>
-                                <span *ngIf="isFeedbackRecentlyUpdated(feedback)" 
-                                      class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
-                                      title="Recently updated">
-                                    <i class="fa-solid fa-sync-alt mr-1"></i>Updated
-                                </span>
+            <div *ngIf="skillFeedbackByType.size > 0" class="space-y-6">
+                <!-- Iterate over skill types (L1, L2, L3, L4, L5) -->
+                <ng-container *ngFor="let skillTypeEntry of getSkillTypeEntries()">
+                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border-2 border-indigo-200 shadow-sm hover:shadow-md transition-all">
+                        <!-- Skill Type Header -->
+                        <div class="flex items-center justify-between mb-4 pb-3 border-b-2 border-indigo-300">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
+                                    <i class="fa-solid fa-graduation-cap text-sm"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-lg text-slate-900">
+                                        {{ selectedSkillForFeedback }} - {{ getSkillTypeDisplayName(skillTypeEntry.key) }}
+                                    </h4>
+                                    <p class="text-xs text-slate-600 mt-0.5">
+                                        <i class="fa-solid fa-layer-group mr-1"></i>
+                                        {{ skillTypeEntry.value.length }} Feedback {{ skillTypeEntry.value.length === 1 ? 'Entry' : 'Entries' }}
+                                    </p>
+                                </div>
                             </div>
-                            <p class="text-xs text-slate-600">
-                                <i class="fa-solid fa-user-tie mr-1"></i>
-                                {{ feedback.manager_name }}
-                                <span class="mx-1">•</span>
-                                <i class="fa-solid fa-clock mr-1"></i>
-                                {{ feedback.updated_at | date:'short' }}
-                                <span *ngIf="feedback.created_at !== feedback.updated_at" class="ml-1 text-slate-500">
-                                    (Updated)
-                                </span>
-                            </p>
+                            <button 
+                                (click)="openFeedbackHistoryModal(selectedSkillForFeedback, skillTypeEntry.key)"
+                                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 shadow-sm hover:shadow-md">
+                                <i class="fa-solid fa-history"></i>
+                                History
+                            </button>
                         </div>
-                        <span class="px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0" [ngClass]="getRatingColorClass(feedback.overall_performance)">
-                            {{ feedback.overall_performance }}/5
-                        </span>
-                    </div>
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
-                        <div *ngIf="feedback.application_of_training" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Application</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.application_of_training }}/5</p>
+
+                        <!-- Latest Feedback for this Type -->
+                        <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value)" class="space-y-4">
+                            <div class="bg-white rounded-lg p-4 border border-indigo-100 shadow-sm">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <span class="px-2 py-1 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300">
+                                            <i class="fa-solid fa-star mr-1"></i>Latest
+                                        </span>
+                                        <span class="text-xs text-slate-600">
+                                            <i class="fa-solid fa-clock mr-1"></i>
+                                            Updated: {{ getLatestFeedbackForType(skillTypeEntry.value).updated_at | date:'short' }}
+                                        </span>
+                                    </div>
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0" 
+                                          [ngClass]="getRatingColorClass(getLatestFeedbackForType(skillTypeEntry.value).overall_performance)">
+                                        {{ getLatestFeedbackForType(skillTypeEntry.value).overall_performance }}/5
+                                    </span>
+                                </div>
+
+                                <div class="mb-3">
+                                    <p class="text-xs text-slate-600 mb-2">
+                                        <i class="fa-solid fa-user-tie mr-1"></i>
+                                        {{ getLatestFeedbackForType(skillTypeEntry.value).manager_name }}
+                                        <span class="mx-1">•</span>
+                                        <i class="fa-solid fa-graduation-cap mr-1"></i>
+                                        {{ getLatestFeedbackForType(skillTypeEntry.value).training_name }}
+                                    </p>
+                                </div>
+
+                                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).application_of_training" 
+                                         class="bg-indigo-50 rounded px-2 py-1.5 text-center border border-indigo-100">
+                                        <p class="text-[10px] text-slate-600 font-medium">Application</p>
+                                        <p class="text-xs font-bold text-slate-800">{{ getLatestFeedbackForType(skillTypeEntry.value).application_of_training }}/5</p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).quality_of_deliverables" 
+                                         class="bg-indigo-50 rounded px-2 py-1.5 text-center border border-indigo-100">
+                                        <p class="text-[10px] text-slate-600 font-medium">Quality</p>
+                                        <p class="text-xs font-bold text-slate-800">{{ getLatestFeedbackForType(skillTypeEntry.value).quality_of_deliverables }}/5</p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).problem_solving_capability" 
+                                         class="bg-indigo-50 rounded px-2 py-1.5 text-center border border-indigo-100">
+                                        <p class="text-[10px] text-slate-600 font-medium">Problem-Solving</p>
+                                        <p class="text-xs font-bold text-slate-800">{{ getLatestFeedbackForType(skillTypeEntry.value).problem_solving_capability }}/5</p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).productivity_independence" 
+                                         class="bg-indigo-50 rounded px-2 py-1.5 text-center border border-indigo-100">
+                                        <p class="text-[10px] text-slate-600 font-medium">Productivity</p>
+                                        <p class="text-xs font-bold text-slate-800">{{ getLatestFeedbackForType(skillTypeEntry.value).productivity_independence }}/5</p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).process_compliance_adherence" 
+                                         class="bg-indigo-50 rounded px-2 py-1.5 text-center border border-indigo-100">
+                                        <p class="text-[10px] text-slate-600 font-medium">Compliance</p>
+                                        <p class="text-xs font-bold text-slate-800">{{ getLatestFeedbackForType(skillTypeEntry.value).process_compliance_adherence }}/5</p>
+                                    </div>
+                                </div>
+
+                                <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).strengths || getLatestFeedbackForType(skillTypeEntry.value).improvement_areas || getLatestFeedbackForType(skillTypeEntry.value).additional_comments" 
+                                     class="space-y-2">
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).strengths" 
+                                         class="bg-green-50 border-l-2 border-green-400 rounded px-3 py-2">
+                                        <p class="text-[10px] font-semibold text-green-800 mb-1">
+                                            <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
+                                        </p>
+                                        <p class="text-xs text-green-700 whitespace-pre-wrap break-words">
+                                            {{ getLatestFeedbackForType(skillTypeEntry.value).strengths }}
+                                        </p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).improvement_areas" 
+                                         class="bg-amber-50 border-l-2 border-amber-400 rounded px-3 py-2">
+                                        <p class="text-[10px] font-semibold text-amber-800 mb-1">
+                                            <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
+                                        </p>
+                                        <p class="text-xs text-amber-700 whitespace-pre-wrap break-words">
+                                            {{ getLatestFeedbackForType(skillTypeEntry.value).improvement_areas }}
+                                        </p>
+                                    </div>
+                                    <div *ngIf="getLatestFeedbackForType(skillTypeEntry.value).additional_comments" 
+                                         class="bg-blue-50 border-l-2 border-blue-400 rounded px-3 py-2">
+                                        <p class="text-[10px] font-semibold text-blue-800 mb-1">
+                                            <i class="fa-solid fa-comment mr-1"></i>Comments
+                                        </p>
+                                        <p class="text-xs text-blue-700 whitespace-pre-wrap break-words">
+                                            {{ getLatestFeedbackForType(skillTypeEntry.value).additional_comments }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div *ngIf="feedback.quality_of_deliverables" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Quality</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.quality_of_deliverables }}/5</p>
-                        </div>
-                        <div *ngIf="feedback.problem_solving_capability" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Problem-Solving</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.problem_solving_capability }}/5</p>
-                        </div>
-                        <div *ngIf="feedback.productivity_independence" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Productivity</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.productivity_independence }}/5</p>
-                        </div>
-                        <div *ngIf="feedback.process_compliance_adherence" class="bg-white/70 rounded px-2 py-1.5 text-center">
-                            <p class="text-[10px] text-slate-600 font-medium">Compliance</p>
-                            <p class="text-xs font-bold text-slate-800">{{ feedback.process_compliance_adherence }}/5</p>
-                        </div>
-                    </div>
-                    <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-2">
-                        <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-3 py-2">
-                            <p class="text-[10px] font-semibold text-green-800 mb-1">
-                                <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
-                            </p>
-                            <p class="text-xs text-green-700 whitespace-pre-wrap break-words">{{ feedback.strengths }}</p>
-                        </div>
-                        <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-3 py-2">
-                            <p class="text-[10px] font-semibold text-amber-800 mb-1">
-                                <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
-                            </p>
-                            <p class="text-xs text-amber-700 whitespace-pre-wrap break-words">{{ feedback.improvement_areas }}</p>
-                        </div>
-                        <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-3 py-2">
-                            <p class="text-[10px] font-semibold text-blue-800 mb-1">
-                                <i class="fa-solid fa-comment mr-1"></i>Comments
-                            </p>
-                            <p class="text-xs text-blue-700 whitespace-pre-wrap break-words">{{ feedback.additional_comments }}</p>
-                        </div>
-                    </div>
                     </div>
                 </ng-container>
             </div>
-            <div *ngIf="skillFeedbackList.length === 0" class="text-center py-12 text-slate-500">
+            <div *ngIf="skillFeedbackByType.size === 0" class="text-center py-12 text-slate-500">
                 <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <i class="fa-solid fa-comment-slash text-3xl text-slate-400"></i>
                 </div>
                 <p class="text-lg font-semibold text-slate-700 mb-2">No Feedback Available</p>
                 <p class="text-sm text-slate-500 max-w-md mx-auto">No feedback has been provided for <span class="font-medium text-slate-700">{{ selectedSkillForFeedback }}</span> yet. Feedback will appear here once your manager reviews your training performance.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feedback History Modal -->
+<div *ngIf="showFeedbackHistoryModal" @fadeIn
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50"
+    (click)="closeFeedbackHistoryModal()">
+    <div @modalScale class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4 max-h-[90vh] flex flex-col" (click)="$event.stopPropagation()">
+        <div class="flex items-center justify-between p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-t-2xl border-b border-indigo-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-600 text-white rounded-lg flex items-center justify-center">
+                    <i class="fa-solid fa-history text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900">Feedback History</h3>
+                    <p class="text-sm text-slate-600">{{ selectedSkillNameForHistory }} - {{ getSkillTypeDisplayName(selectedSkillTypeForHistory) }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div *ngIf="feedbackHistoryList.length > 0" class="text-right">
+                    <p class="text-xs text-slate-600">Total Entries</p>
+                    <p class="text-lg font-bold text-indigo-600">{{ feedbackHistoryList.length }}</p>
+                </div>
+                <button (click)="closeFeedbackHistoryModal()" 
+                        class="w-9 h-9 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-times text-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6">
+            <div *ngIf="feedbackHistoryList.length > 0" class="space-y-4">
+                <ng-container *ngFor="let feedback of feedbackHistoryList; let i = index">
+                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200 hover:shadow-md transition-all relative"
+                         [ngClass]="{
+                           'border-l-4 border-l-green-500': i === 0,
+                           'border-l-4 border-l-purple-500': i > 0
+                         }">
+                        <div class="flex items-start justify-between gap-2 mb-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                    <h4 class="font-bold text-slate-900 text-sm truncate">{{ feedback.training_name }}</h4>
+                                    <span *ngIf="i === 0" 
+                                          class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
+                                          title="Latest feedback">
+                                        <i class="fa-solid fa-star mr-1"></i>Latest
+                                    </span>
+                                    <span *ngIf="i > 0" 
+                                          class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-300 flex-shrink-0"
+                                          [title]="'Entry ' + (i + 1) + ' of ' + feedbackHistoryList.length">
+                                        <i class="fa-solid fa-history mr-1"></i>Entry {{ i + 1 }}/{{ feedbackHistoryList.length }}
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-600">
+                                    <i class="fa-solid fa-user-tie mr-1"></i>
+                                    {{ feedback.manager_name }}
+                                    <span class="mx-1">•</span>
+                                    <i class="fa-solid fa-clock mr-1"></i>
+                                    {{ feedback.updated_at | date:'short' }}
+                                    <span *ngIf="feedback.created_at !== feedback.updated_at" class="ml-1 text-slate-500">
+                                        (Updated)
+                                    </span>
+                                </p>
+                            </div>
+                            <span class="px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0" [ngClass]="getRatingColorClass(feedback.overall_performance)">
+                                {{ feedback.overall_performance }}/5
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+                            <div *ngIf="feedback.application_of_training" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                                <p class="text-[10px] text-slate-600 font-medium">Application</p>
+                                <p class="text-xs font-bold text-slate-800">{{ feedback.application_of_training }}/5</p>
+                            </div>
+                            <div *ngIf="feedback.quality_of_deliverables" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                                <p class="text-[10px] text-slate-600 font-medium">Quality</p>
+                                <p class="text-xs font-bold text-slate-800">{{ feedback.quality_of_deliverables }}/5</p>
+                            </div>
+                            <div *ngIf="feedback.problem_solving_capability" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                                <p class="text-[10px] text-slate-600 font-medium">Problem-Solving</p>
+                                <p class="text-xs font-bold text-slate-800">{{ feedback.problem_solving_capability }}/5</p>
+                            </div>
+                            <div *ngIf="feedback.productivity_independence" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                                <p class="text-[10px] text-slate-600 font-medium">Productivity</p>
+                                <p class="text-xs font-bold text-slate-800">{{ feedback.productivity_independence }}/5</p>
+                            </div>
+                            <div *ngIf="feedback.process_compliance_adherence" class="bg-white/70 rounded px-2 py-1.5 text-center">
+                                <p class="text-[10px] text-slate-600 font-medium">Compliance</p>
+                                <p class="text-xs font-bold text-slate-800">{{ feedback.process_compliance_adherence }}/5</p>
+                            </div>
+                        </div>
+                        <div *ngIf="feedback.strengths || feedback.improvement_areas || feedback.additional_comments" class="space-y-2">
+                            <div *ngIf="feedback.strengths" class="bg-green-50 border-l-2 border-green-400 rounded px-3 py-2">
+                                <p class="text-[10px] font-semibold text-green-800 mb-1">
+                                    <i class="fa-solid fa-thumbs-up mr-1"></i>Strengths
+                                </p>
+                                <p class="text-xs text-green-700 whitespace-pre-wrap break-words">{{ feedback.strengths }}</p>
+                            </div>
+                            <div *ngIf="feedback.improvement_areas" class="bg-amber-50 border-l-2 border-amber-400 rounded px-3 py-2">
+                                <p class="text-[10px] font-semibold text-amber-800 mb-1">
+                                    <i class="fa-solid fa-arrow-up mr-1"></i>Improvement Areas
+                                </p>
+                                <p class="text-xs text-amber-700 whitespace-pre-wrap break-words">{{ feedback.improvement_areas }}</p>
+                            </div>
+                            <div *ngIf="feedback.additional_comments" class="bg-blue-50 border-l-2 border-blue-400 rounded px-3 py-2">
+                                <p class="text-[10px] font-semibold text-blue-800 mb-1">
+                                    <i class="fa-solid fa-comment mr-1"></i>Comments
+                                </p>
+                                <p class="text-xs text-blue-700 whitespace-pre-wrap break-words">{{ feedback.additional_comments }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </ng-container>
+            </div>
+            <div *ngIf="feedbackHistoryList.length === 0" class="text-center py-12 text-slate-500">
+                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-history text-3xl text-slate-400"></i>
+                </div>
+                <p class="text-lg font-semibold text-slate-700 mb-2">No History Available</p>
+                <p class="text-sm text-slate-500 max-w-md mx-auto">No feedback history found for <span class="font-medium text-slate-700">{{ selectedSkillNameForHistory }} - {{ getSkillTypeDisplayName(selectedSkillTypeForHistory) }}</span>.</p>
             </div>
         </div>
     </div>

@@ -51,6 +51,31 @@ async def assign_training_to_employee(
     """
     manager_username = current_user.get("username")
 
+    # Verify training exists
+    training_stmt = select(models.TrainingDetail).where(
+        models.TrainingDetail.id == assignment.training_id
+    )
+    training_result = await db.execute(training_stmt)
+    training = training_result.scalar_one_or_none()
+    
+    if not training:
+        raise HTTPException(
+            status_code=404,
+            detail="Training not found"
+        )
+    
+    # Verify employee exists in manager_employee relationship
+    employee_check_stmt = select(models.ManagerEmployee).where(
+        models.ManagerEmployee.employee_empid == assignment.employee_username,
+        models.ManagerEmployee.manager_empid == manager_username
+    )
+    employee_check_result = await db.execute(employee_check_stmt)
+    if not employee_check_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=403,
+            detail="You can only assign trainings to employees in your team"
+        )
+    
     # Check if assignment already exists
     existing_assignment_stmt = select(models.TrainingAssignment).where(
         models.TrainingAssignment.training_id == assignment.training_id,
@@ -63,17 +88,24 @@ async def assign_training_to_employee(
             detail="This training is already assigned to this employee"
         )
 
-    # Create the new assignment record
-    db_assignment = models.TrainingAssignment(
-        training_id=assignment.training_id,
-        employee_empid=assignment.employee_username,
-        manager_empid=manager_username
-    )
-    db.add(db_assignment)
-    await db.commit()
-    await db.refresh(db_assignment)
-    
-    return {"message": "Training assigned successfully"}
+    try:
+        # Create the new assignment record
+        db_assignment = models.TrainingAssignment(
+            training_id=assignment.training_id,
+            employee_empid=assignment.employee_username,
+            manager_empid=manager_username
+        )
+        db.add(db_assignment)
+        await db.commit()
+        await db.refresh(db_assignment)
+        
+        return {"message": "Training assigned successfully"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to assign training: {str(e)}"
+        )
 
 @router.get("/my")
 async def get_my_assigned_trainings(
@@ -82,14 +114,18 @@ async def get_my_assigned_trainings(
 ):
     """
     Returns training details for trainings assigned to the current logged-in user (employee).
+    Returns all assigned trainings, regardless of attendance status.
+    Note: Access to assignments and feedback is still restricted to attended trainings only.
     """
     employee_username = current_user.get("username")
 
-    # Join assignments with training details
+    # Get all assigned trainings (show all, not just those with attendance marked)
     stmt = select(models.TrainingDetail).join(
         models.TrainingAssignment,
         models.TrainingAssignment.training_id == models.TrainingDetail.id
-    ).where(models.TrainingAssignment.employee_empid == employee_username)
+    ).where(
+        models.TrainingAssignment.employee_empid == employee_username
+    )
 
     result = await db.execute(stmt)
     trainings = result.scalars().all()
@@ -210,3 +246,229 @@ async def delete_assignment(
     await db.commit()
     
     return {"message": "Assignment deleted successfully"}
+
+@router.get("/training/{training_id}/candidates")
+async def get_training_candidates(
+    training_id: int,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Returns list of all candidates assigned to a specific training.
+    Includes their attendance status.
+    Only accessible by the trainer of that training.
+    """
+    trainer_username = current_user.get("username")
+    if not trainer_username:
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials"
+        )
+    
+    # Verify the training exists and get trainer name
+    training_stmt = select(models.TrainingDetail).where(
+        models.TrainingDetail.id == training_id
+    )
+    training_result = await db.execute(training_stmt)
+    training = training_result.scalar_one_or_none()
+    
+    if not training:
+        raise HTTPException(
+            status_code=404,
+            detail="Training not found"
+        )
+    
+    # Verify the current user is the trainer for this training
+    trainer_name = str(training.trainer_name or "").strip()
+    if not trainer_name:
+        raise HTTPException(
+            status_code=403,
+            detail="Training has no trainer assigned"
+        )
+    
+    # Get employee/manager name for matching
+    employee_result = await db.execute(
+        select(models.ManagerEmployee.employee_name).where(
+            models.ManagerEmployee.employee_empid == trainer_username
+        ).distinct()
+    )
+    employee_name = employee_result.scalar_one_or_none()
+    
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        ).distinct()
+    )
+    manager_name = manager_result.scalar_one_or_none()
+    
+    display_name = employee_name or manager_name
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    trainer_name_lower = trainer_name.lower().strip()
+    
+    # Check if current user is the trainer
+    is_trainer = (
+        trainer_username_lower == trainer_name_lower or
+        display_name_lower == trainer_name_lower
+    )
+    
+    if not is_trainer:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the trainer of this training can view candidates"
+        )
+    
+    # Get all assignments for this training
+    assignments_stmt = select(
+        models.TrainingAssignment.employee_empid,
+        models.ManagerEmployee.employee_name
+    ).join(
+        models.ManagerEmployee,
+        models.TrainingAssignment.employee_empid == models.ManagerEmployee.employee_empid
+    ).where(
+        models.TrainingAssignment.training_id == training_id
+    ).distinct()
+    
+    assignments_result = await db.execute(assignments_stmt)
+    assignments = assignments_result.all()
+    
+    # Get attendance records for this training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance_records = {rec.employee_empid: rec.attended for rec in attendance_result.scalars().all()}
+    
+    # Build response with candidate info and attendance status
+    candidates = []
+    for empid, empname in assignments:
+        candidates.append({
+            "employee_empid": empid,
+            "employee_name": empname or empid,
+            "attended": attendance_records.get(empid, False)
+        })
+    
+    return candidates
+
+class AttendanceMarkRequest(BaseModel):
+    """Request schema for marking attendance"""
+    candidate_empids: list[str]  # List of employee IDs who attended
+
+@router.post("/training/{training_id}/attendance")
+async def mark_training_attendance(
+    training_id: int,
+    attendance_data: AttendanceMarkRequest,
+    db: AsyncSession = Depends(get_db_async),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Marks attendance for candidates who attended the training.
+    Only accessible by the trainer of that training.
+    """
+    trainer_username = current_user.get("username")
+    if not trainer_username:
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials"
+        )
+    
+    # Verify the training exists and get trainer name
+    training_stmt = select(models.TrainingDetail).where(
+        models.TrainingDetail.id == training_id
+    )
+    training_result = await db.execute(training_stmt)
+    training = training_result.scalar_one_or_none()
+    
+    if not training:
+        raise HTTPException(
+            status_code=404,
+            detail="Training not found"
+        )
+    
+    # Verify the current user is the trainer for this training
+    trainer_name = str(training.trainer_name or "").strip()
+    if not trainer_name:
+        raise HTTPException(
+            status_code=403,
+            detail="Training has no trainer assigned"
+        )
+    
+    # Get employee/manager name for matching
+    employee_result = await db.execute(
+        select(models.ManagerEmployee.employee_name).where(
+            models.ManagerEmployee.employee_empid == trainer_username
+        ).distinct()
+    )
+    employee_name = employee_result.scalar_one_or_none()
+    
+    manager_result = await db.execute(
+        select(models.ManagerEmployee.manager_name).where(
+            models.ManagerEmployee.manager_empid == trainer_username
+        ).distinct()
+    )
+    manager_name = manager_result.scalar_one_or_none()
+    
+    display_name = employee_name or manager_name
+    trainer_username_lower = str(trainer_username).lower().strip()
+    display_name_lower = (display_name or "").lower().strip() if display_name else ""
+    trainer_name_lower = trainer_name.lower().strip()
+    
+    # Check if current user is the trainer
+    is_trainer = (
+        trainer_username_lower == trainer_name_lower or
+        display_name_lower == trainer_name_lower
+    )
+    
+    if not is_trainer:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the trainer of this training can mark attendance"
+        )
+    
+    # Get all assignments for this training to validate candidate IDs
+    assignments_stmt = select(models.TrainingAssignment.employee_empid).where(
+        models.TrainingAssignment.training_id == training_id
+    )
+    assignments_result = await db.execute(assignments_stmt)
+    valid_empids = {row[0] for row in assignments_result.all()}
+    
+    # Validate that all provided employee IDs are assigned to this training
+    invalid_empids = set(attendance_data.candidate_empids) - valid_empids
+    if invalid_empids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid employee IDs: {', '.join(invalid_empids)}. These employees are not assigned to this training."
+        )
+    
+    # Delete existing attendance records for this training
+    delete_stmt = delete(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id
+    )
+    await db.execute(delete_stmt)
+    
+    # Create new attendance records
+    for empid in attendance_data.candidate_empids:
+        attendance = models.TrainingAttendance(
+            training_id=training_id,
+            employee_empid=empid,
+            attended=True
+        )
+        db.add(attendance)
+    
+    # Also mark non-attended candidates as False (optional, but helps with tracking)
+    for empid in valid_empids:
+        if empid not in attendance_data.candidate_empids:
+            attendance = models.TrainingAttendance(
+                training_id=training_id,
+                employee_empid=empid,
+                attended=False
+            )
+            db.add(attendance)
+    
+    await db.commit()
+    
+    return {
+        "message": "Attendance marked successfully",
+        "attended_count": len(attendance_data.candidate_empids),
+        "total_assigned": len(valid_empids)
+    }

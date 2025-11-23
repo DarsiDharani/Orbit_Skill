@@ -233,6 +233,13 @@ async def respond_to_request(
             detail="This request has already been responded to"
         )
 
+    # Validate status value
+    if response_data.status not in ['approved', 'rejected']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status must be either 'approved' or 'rejected'"
+        )
+
     # Update the request
     request.status = response_data.status
     request.manager_notes = response_data.manager_notes

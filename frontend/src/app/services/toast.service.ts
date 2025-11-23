@@ -50,14 +50,14 @@ export class ToastService {
   }
 
   /**
-   * Main method to show a toast notification
+   * Main method to show a centered modal notification
    * @param message - The message text to display
-   * @param type - Toast type (default: 'info')
+   * @param type - Notification type (default: 'info')
    * @param title - Optional title (uses default if not provided)
-   * @param duration - Auto-dismiss duration in ms (default: 5000, 0 = no auto-dismiss)
-   * @returns The generated toast ID for programmatic removal
+   * @param duration - Auto-dismiss duration in ms (default: 0 = no auto-dismiss for modals, user must click)
+   * @returns The generated notification ID for programmatic removal
    */
-  show(message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', title?: string, duration: number = 5000): string {
+  show(message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', title?: string, duration: number = 0): string {
     const id = this.generateId();
     const toast: ToastMessage = {
       id,
@@ -67,10 +67,11 @@ export class ToastService {
       duration
     };
 
-    const currentToasts = this.toastsSubject.value;
-    this.toastsSubject.next([...currentToasts, toast]);
+    // For centered modals, only show one at a time (replace existing)
+    // This ensures the user focuses on one notification at a time
+    this.toastsSubject.next([toast]);
 
-    // Auto remove after duration
+    // Auto remove after duration (if duration > 0)
     if (duration > 0) {
       setTimeout(() => {
         this.remove(id);
@@ -81,47 +82,47 @@ export class ToastService {
   }
 
   /**
-   * Convenience method to show a success toast
+   * Convenience method to show a success modal
    * @param message - Success message text
    * @param title - Optional title
-   * @param duration - Auto-dismiss duration in ms
-   * @returns Toast ID
+   * @param duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
+   * @returns Notification ID
    */
   success(message: string, title?: string, duration?: number): string {
-    return this.show(message, 'success', title, duration);
+    return this.show(message, 'success', title || 'Success!', duration);
   }
 
   /**
-   * Convenience method to show an error toast
+   * Convenience method to show an error modal
    * @param message - Error message text
    * @param title - Optional title
-   * @param duration - Auto-dismiss duration in ms
-   * @returns Toast ID
+   * @param duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
+   * @returns Notification ID
    */
   error(message: string, title?: string, duration?: number): string {
-    return this.show(message, 'error', title, duration);
+    return this.show(message, 'error', title || 'Error', duration);
   }
 
   /**
-   * Convenience method to show a warning toast
+   * Convenience method to show a warning modal
    * @param message - Warning message text
    * @param title - Optional title
-   * @param duration - Auto-dismiss duration in ms
-   * @returns Toast ID
+   * @param duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
+   * @returns Notification ID
    */
   warning(message: string, title?: string, duration?: number): string {
-    return this.show(message, 'warning', title, duration);
+    return this.show(message, 'warning', title || 'Warning', duration);
   }
 
   /**
-   * Convenience method to show an info toast
+   * Convenience method to show an info modal
    * @param message - Info message text
    * @param title - Optional title
-   * @param duration - Auto-dismiss duration in ms
-   * @returns Toast ID
+   * @param duration - Auto-dismiss duration in ms (0 = no auto-dismiss)
+   * @returns Notification ID
    */
   info(message: string, title?: string, duration?: number): string {
-    return this.show(message, 'info', title, duration);
+    return this.show(message, 'info', title || 'Information', duration);
   }
 
   /**

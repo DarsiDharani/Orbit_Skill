@@ -22,13 +22,13 @@ import { trigger, transition, style, animate } from '@angular/animations';
   templateUrl: './toast.component.html',
   styleUrls: ['./toast.component.css'],
   animations: [
-    trigger('slideInOut', [
+    trigger('modalScale', [
       transition(':enter', [
-        style({ transform: 'translateX(100%)', opacity: 0 }),
-        animate('300ms ease-out', style({ transform: 'translateX(0)', opacity: 1 }))
+        style({ transform: 'scale(0.8)', opacity: 0 }),
+        animate('300ms cubic-bezier(0.34, 1.56, 0.64, 1)', style({ transform: 'scale(1)', opacity: 1 }))
       ]),
       transition(':leave', [
-        animate('300ms ease-in', style({ transform: 'translateX(100%)', opacity: 0 }))
+        animate('200ms ease-in', style({ transform: 'scale(0.9)', opacity: 0 }))
       ])
     ])
   ]
@@ -110,6 +110,92 @@ export class ToastComponent implements OnInit, OnDestroy {
       case 'warning': return 'text-yellow-500';
       case 'info': return 'text-blue-500';
       default: return 'text-gray-500';
+    }
+  }
+
+  /**
+   * Returns gradient classes for header based on toast type
+   */
+  getHeaderGradient(type: string): string {
+    switch (type) {
+      case 'success': return 'bg-gradient-to-r from-green-500 to-emerald-600';
+      case 'error': return 'bg-gradient-to-r from-red-500 to-rose-600';
+      case 'warning': return 'bg-gradient-to-r from-amber-500 to-orange-600';
+      case 'info': return 'bg-gradient-to-r from-blue-500 to-cyan-600';
+      default: return 'bg-gradient-to-r from-slate-500 to-slate-600';
+    }
+  }
+
+  /**
+   * Returns border classes based on toast type
+   */
+  getBorderClass(type: string): string {
+    switch (type) {
+      case 'success': return 'border-green-200';
+      case 'error': return 'border-red-200';
+      case 'warning': return 'border-amber-200';
+      case 'info': return 'border-blue-200';
+      default: return 'border-slate-200';
+    }
+  }
+
+  /**
+   * Returns button classes based on toast type
+   */
+  getButtonClass(type: string): string {
+    switch (type) {
+      case 'success': return 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700';
+      case 'error': return 'bg-gradient-to-r from-red-600 to-rose-600 text-white hover:from-red-700 hover:to-rose-700';
+      case 'warning': return 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700';
+      case 'info': return 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700';
+      default: return 'bg-gradient-to-r from-slate-600 to-slate-700 text-white hover:from-slate-700 hover:to-slate-800';
+    }
+  }
+
+  /**
+   * Returns button icon based on toast type
+   */
+  getButtonIcon(type: string): string {
+    switch (type) {
+      case 'success': return 'fa-check';
+      case 'error': return 'fa-times';
+      case 'warning': return 'fa-exclamation';
+      case 'info': return 'fa-info';
+      default: return 'fa-check';
+    }
+  }
+
+  /**
+   * Returns button text based on toast type
+   */
+  getButtonText(type: string): string {
+    switch (type) {
+      case 'success': return 'Got it!';
+      case 'error': return 'Okay';
+      case 'warning': return 'Understood';
+      case 'info': return 'Continue';
+      default: return 'Close';
+    }
+  }
+
+  /**
+   * Formats message with line breaks and basic HTML
+   */
+  formatMessage(message: string): string {
+    // Convert newlines to <br> and escape HTML
+    return message
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  /**
+   * Closes the current (first) toast
+   */
+  closeCurrentToast(): void {
+    if (this.toasts.length > 0) {
+      this.removeToast(this.toasts[0].id);
     }
   }
 }

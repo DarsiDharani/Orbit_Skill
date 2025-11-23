@@ -148,6 +148,7 @@ interface ManagerPerformanceFeedback {
     updated_at: string;
     updateNumber?: number;  // Added for feedback history display
     totalUpdates?: number;  // Added for feedback history display
+    skill_category?: string;  // Added for skill level grouping (L1-L5)
 }
 
 // CalendarEvent, Assignment, AssignmentQuestion, QuestionOption, and FeedbackQuestion 
@@ -316,6 +317,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   sharedFeedback: Map<number, boolean> = new Map(); // Track which trainings have feedback shared
   assignmentSharedBy: Map<number, string> = new Map(); // Track who shared the assignment
   feedbackSharedBy: Map<number, string> = new Map(); // Track who shared the feedback
+  trainingCandidates: Map<number, {employee_empid: string, employee_name: string, attended: boolean}[]> = new Map(); // Store candidates for each training
+  showAttendanceModal: boolean = false;
+  selectedTrainingForAttendance: number | null = null;
+  attendanceCandidates: {employee_empid: string, employee_name: string, attended: boolean}[] = [];
+  isMarkingAttendance: boolean = false;
   private _myTrainingsCache: TrainingDetail[] = [];
   private _myTrainingsCacheKey: string = '';
   
@@ -393,9 +399,25 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   isSubmittingFeedback: boolean = false;
   existingFeedback: ManagerPerformanceFeedback | null = null;
   feedbackHistory: ManagerPerformanceFeedback[] = [];
+  feedbackHistoryByType: Map<string, ManagerPerformanceFeedback[]> = new Map();
   isLoadingFeedbackHistory: boolean = false;
+  showFeedbackHistoryModal: boolean = false;
+  selectedSkillTypeForHistory: string = '';
+  selectedTrainingNameForHistory: string = '';
+  selectedEmployeeNameForHistory: string = '';
+  feedbackHistoryList: ManagerPerformanceFeedback[] = [];
   showSuccessPopup: boolean = false;
   successPopupMessage: string = '';
+  
+  // Attendance success popup
+  showAttendanceSuccessPopup: boolean = false;
+  attendanceSuccessData: {
+    trainingName: string;
+    attendedCount: number;
+    absentCount: number;
+    totalCount: number;
+    attendedNames: string;
+  } | null = null;
 
   // Final Evaluation
   showFinalEvaluationModal: boolean = false;
@@ -802,7 +824,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       process_compliance_adherence: null,
       improvement_areas: '',
       strengths: '',
-      overall_performance: 3,
+      overall_performance: 0,
       additional_comments: ''
     };
     this.existingFeedback = null;
@@ -833,9 +855,11 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
             process_compliance_adherence: feedback.process_compliance_adherence || null,
             improvement_areas: feedback.improvement_areas || '',
             strengths: feedback.strengths || '',
-            overall_performance: feedback.overall_performance,
+            overall_performance: 0,
             additional_comments: feedback.additional_comments || ''
           };
+          // Calculate overall performance from the loaded ratings
+          this.calculateOverallPerformance();
         }
       },
       error: (err) => {
@@ -849,27 +873,124 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.feedbackHistory = [];
     this.http.get<ManagerPerformanceFeedback[]>(this.apiService.managerPerformanceFeedbackHistoryUrl(trainingId, employeeEmpid), { headers }).subscribe({
       next: (history) => {
-        // Sort by updated_at descending (most recent first) and add update numbers
-        const sortedHistory = (history || []).sort((a, b) => {
+        // Get training information to enrich feedback with skill_category
+        const training = this.allTrainings.find(t => t.id === trainingId);
+        const skillCategory = training?.skill_category || 'Unknown';
+
+        // Enrich feedback with skill_category and sort by updated_at descending (most recent first)
+        const enrichedHistory = (history || []).map(feedback => ({
+          ...feedback,
+          skill_category: skillCategory
+        })).sort((a, b) => {
           const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
           const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
           return dateB - dateA;
         });
 
         // Add update numbers to each entry
-        this.feedbackHistory = sortedHistory.map((feedback, index) => ({
+        this.feedbackHistory = enrichedHistory.map((feedback, index) => ({
           ...feedback,
           updateNumber: index + 1,
-          totalUpdates: sortedHistory.length
+          totalUpdates: enrichedHistory.length
         }));
+
+        // Group feedback by skill type
+        this.feedbackHistoryByType = this.groupFeedbackBySkillType(this.feedbackHistory);
+        
         this.isLoadingFeedbackHistory = false;
       },
       error: (err) => {
         console.error('Failed to load feedback history:', err);
         this.feedbackHistory = [];
+        this.feedbackHistoryByType = new Map();
         this.isLoadingFeedbackHistory = false;
       }
     });
+  }
+
+  // Group feedback by skill type (L1-L5)
+  groupFeedbackBySkillType(feedbackList: ManagerPerformanceFeedback[]): Map<string, ManagerPerformanceFeedback[]> {
+    const grouped = new Map<string, ManagerPerformanceFeedback[]>();
+    
+    feedbackList.forEach(feedback => {
+      // Get skill category (L1, L2, L3, L4, L5) or default to 'Unknown'
+      const skillType = feedback.skill_category || 'Unknown';
+      
+      if (!grouped.has(skillType)) {
+        grouped.set(skillType, []);
+      }
+      grouped.get(skillType)!.push(feedback);
+    });
+    
+    // Sort feedback within each group by updated_at (most recent first)
+    grouped.forEach((feedbackList, skillType) => {
+      feedbackList.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+    });
+    
+    return grouped;
+  }
+
+  // Get latest feedback for a skill type
+  getLatestFeedbackForType(feedbackList: ManagerPerformanceFeedback[]): ManagerPerformanceFeedback | null {
+    if (!feedbackList || feedbackList.length === 0) return null;
+    
+    // List is already sorted by updated_at descending
+    return feedbackList[0];
+  }
+
+  // Get skill type display name
+  getSkillTypeDisplayName(skillType: string): string {
+    const typeMap: { [key: string]: string } = {
+      'L1': 'Beginner',
+      'L2': 'Basic',
+      'L3': 'Intermediate',
+      'L4': 'Advanced',
+      'L5': 'Expert'
+    };
+    return typeMap[skillType] || skillType;
+  }
+
+  // Get skill type entries as array for template iteration
+  getSkillTypeEntries(): Array<{key: string, value: ManagerPerformanceFeedback[]}> {
+    return Array.from(this.feedbackHistoryByType.entries()).map(([key, value]) => ({
+      key,
+      value
+    }));
+  }
+
+  // Open feedback history modal for a specific skill type
+  openFeedbackHistoryModal(skillType: string): void {
+    if (!skillType || !this.selectedSubmissionForFeedback) return;
+    this.selectedSkillTypeForHistory = skillType;
+    this.selectedTrainingNameForHistory = this.selectedSubmissionForFeedback.submission.training_name;
+    this.selectedEmployeeNameForHistory = this.selectedSubmissionForFeedback.submission.employee_name;
+    
+    // Get all feedback for this skill type
+    this.feedbackHistoryList = this.feedbackHistory.filter(fb => 
+      (fb.skill_category || 'Unknown') === skillType
+    );
+    
+    // Sort by updated_at descending (most recent first)
+    this.feedbackHistoryList.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+    
+    this.showFeedbackHistoryModal = true;
+  }
+
+  // Close feedback history modal
+  closeFeedbackHistoryModal(): void {
+    this.showFeedbackHistoryModal = false;
+    this.selectedSkillTypeForHistory = '';
+    this.selectedTrainingNameForHistory = '';
+    this.selectedEmployeeNameForHistory = '';
+    this.feedbackHistoryList = [];
   }
 
   // Close feedback modal
@@ -878,6 +999,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.selectedSubmissionForFeedback = null;
     this.existingFeedback = null;
     this.feedbackHistory = [];
+    this.feedbackHistoryByType = new Map();
     this.performanceFeedback = {
       training_id: 0,
       employee_empid: '',
@@ -888,7 +1010,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       process_compliance_adherence: null,
       improvement_areas: '',
       strengths: '',
-      overall_performance: 3,
+      overall_performance: 0,
       additional_comments: ''
     };
   }
@@ -1186,18 +1308,83 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.showSuccessPopup = false;
     this.successPopupMessage = '';
   }
+  
+  closeAttendanceSuccessPopup(): void {
+    this.showAttendanceSuccessPopup = false;
+    this.attendanceSuccessData = null;
+  }
+
+  // Calculate overall performance as average of the five ratings
+  // Only calculates when all five ratings are provided
+  calculateOverallPerformance(): void {
+    // Get all five ratings
+    const r1 = this.performanceFeedback.application_of_training;
+    const r2 = this.performanceFeedback.quality_of_deliverables;
+    const r3 = this.performanceFeedback.problem_solving_capability;
+    const r4 = this.performanceFeedback.productivity_independence;
+    const r5 = this.performanceFeedback.process_compliance_adherence;
+
+    // Check if all five ratings are provided (not null or undefined)
+    if (r1 === null || r1 === undefined || r2 === null || r2 === undefined || 
+        r3 === null || r3 === undefined || r4 === null || r4 === undefined || 
+        r5 === null || r5 === undefined) {
+      this.performanceFeedback.overall_performance = 0;
+      return;
+    }
+
+    // Convert to numbers explicitly (handle both number and string inputs)
+    const rating1 = typeof r1 === 'string' ? parseInt(r1, 10) : Number(r1);
+    const rating2 = typeof r2 === 'string' ? parseInt(r2, 10) : Number(r2);
+    const rating3 = typeof r3 === 'string' ? parseInt(r3, 10) : Number(r3);
+    const rating4 = typeof r4 === 'string' ? parseInt(r4, 10) : Number(r4);
+    const rating5 = typeof r5 === 'string' ? parseInt(r5, 10) : Number(r5);
+
+    // Verify all are valid numbers
+    if (isNaN(rating1) || isNaN(rating2) || isNaN(rating3) || isNaN(rating4) || isNaN(rating5)) {
+      this.performanceFeedback.overall_performance = 0;
+      return;
+    }
+
+    // Calculate sum of all five ratings
+    const sum = rating1 + rating2 + rating3 + rating4 + rating5;
+    
+    // Calculate average: sum divided by 5
+    const average = sum / 5;
+    
+    // Round to nearest integer (1-5 scale)
+    this.performanceFeedback.overall_performance = Math.round(average);
+    
+    // Ensure it's within valid range (should always be 1-5 after rounding)
+    if (this.performanceFeedback.overall_performance < 1) {
+      this.performanceFeedback.overall_performance = 1;
+    } else if (this.performanceFeedback.overall_performance > 5) {
+      this.performanceFeedback.overall_performance = 5;
+    }
+  }
+
+  // Get overall performance display text
+  getOverallPerformanceText(): string {
+    if (this.performanceFeedback.overall_performance === 0) {
+      return 'Not Calculated (Please provide all ratings)';
+    }
+    const ratingLabels: { [key: number]: string } = {
+      1: '1 - Poor',
+      2: '2 - Below Average',
+      3: '3 - Average',
+      4: '4 - Good',
+      5: '5 - Excellent'
+    };
+    return ratingLabels[this.performanceFeedback.overall_performance] || 'Not Calculated';
+  }
 
   // Submit performance feedback
   submitPerformanceFeedback(): void {
     if (!this.selectedSubmissionForFeedback) return;
     
-    // Validate required fields
-    if (this.performanceFeedback.overall_performance < 1 || this.performanceFeedback.overall_performance > 5) {
-      this.toastService.error('Overall performance rating must be between 1 and 5');
-      return;
-    }
-
-    // Validate optional ratings
+    // Ensure overall performance is calculated
+    this.calculateOverallPerformance();
+    
+    // Validate that all five ratings are provided
     const ratings = [
       { name: 'Application of Training in Daily Work', value: this.performanceFeedback.application_of_training },
       { name: 'Quality of Deliverables', value: this.performanceFeedback.quality_of_deliverables },
@@ -1206,12 +1393,27 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       { name: 'Process & Compliance Adherence', value: this.performanceFeedback.process_compliance_adherence }
     ];
 
+    // Check if all ratings are provided
+    const missingRatings = ratings.filter(rating => rating.value === null || rating.value === undefined);
+    if (missingRatings.length > 0) {
+      this.toastService.error('Please provide all five performance ratings before submitting.');
+      return;
+    }
+
+    // Validate rating values are within range
     for (const rating of ratings) {
       if (rating.value !== null && (rating.value < 1 || rating.value > 5)) {
         this.toastService.error(`${rating.name} rating must be between 1 and 5`);
         return;
       }
     }
+
+    // Validate overall performance is calculated correctly
+    if (this.performanceFeedback.overall_performance < 1 || this.performanceFeedback.overall_performance > 5) {
+      this.toastService.error('Overall performance rating must be between 1 and 5');
+      return;
+    }
+
 
     const token = this.authService.getToken();
     if (!token) return;
@@ -1632,9 +1834,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     // Update cache
     this._myTrainingsCache = filtered;
     this._myTrainingsCacheKey = cacheKey;
-    // Check shared status for all trainings
+    // Check shared status for all trainings and fetch candidates
     filtered.forEach(training => {
       this.checkSharedStatus(training.id);
+      this.fetchTrainingCandidates(training.id);
     });
     
     return filtered;
@@ -2050,24 +2253,168 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     return this.manager?.skills.filter(skill => skill.status === 'Met').length || 0;
   }
 
-  getSkillProgress(skill: Competency): number {
-    const extractLevel = (level: string): number => {
-      if (!level) return 0;
-      if (level.toUpperCase().startsWith('L')) {
-        return parseInt(level.substring(1), 10) || 0;
+  // Helper method to get feedback for a specific skill (similar to engineer dashboard)
+  getFeedbackForSkill(skillName: string, employeeEmpid?: string): ManagerPerformanceFeedback[] {
+    if (!skillName || !skillName.trim()) {
+      return [];
+    }
+
+    // If no trainings have been loaded yet, return empty array
+    if (!this.allTrainings || this.allTrainings.length === 0) {
+      return [];
+    }
+
+    // Find trainings that match this skill (case-insensitive, trimmed)
+    const skillNameLower = skillName.toLowerCase().trim();
+    const matchingTrainings = this.allTrainings.filter(t => {
+      if (!t || !t.skill) return false;
+      return t.skill.toLowerCase().trim() === skillNameLower;
+    });
+
+    if (matchingTrainings.length === 0) {
+      return [];
+    }
+
+    // Get training IDs for matching trainings
+    const trainingIds = matchingTrainings.map(t => t.id).filter(id => id != null);
+    if (trainingIds.length === 0) {
+      return [];
+    }
+
+    // Get feedback from feedbackHistory (which contains all feedback for the selected employee)
+    // If employeeEmpid is provided, filter by it; otherwise, this is for manager's own skills
+    // For manager's own skills, we might not have feedback, so return empty array
+    if (!employeeEmpid) {
+      // Manager's own skills - feedback might not be available in the same way
+      // Return empty array for now, can be enhanced later if needed
+      return [];
+    }
+
+    // Filter feedback history by training IDs and employee
+    const filteredFeedback = this.feedbackHistory.filter(feedback => {
+      if (!feedback || !feedback.training_id) return false;
+      if (feedback.employee_empid !== employeeEmpid) return false;
+      return trainingIds.includes(feedback.training_id);
+    });
+
+    // Enrich with training info
+    const trainingMap = new Map<number, any>();
+    matchingTrainings.forEach(t => {
+      if (t.id != null) {
+        trainingMap.set(t.id, t);
       }
-      const levelMap: { [key: string]: number } = {
-        'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4
+    });
+
+    return filteredFeedback.map(feedback => {
+      const training = trainingMap.get(feedback.training_id);
+      return {
+        ...feedback,
+        skill_category: training?.skill_category || null,
+        training_name: training?.training_name || feedback.training_name
+      } as ManagerPerformanceFeedback;
+    });
+  }
+
+  getSkillProgress(skill: Competency): number {
+    // Calculate progress based on average overall performance across L1-L5 levels
+    const skillName = skill.skill;
+    if (!skillName) return 0;
+
+    // For manager dashboard, we need employee_empid to get feedback
+    // Since this is used for manager's own skills, we might not have feedback
+    // Try to get feedback - if not available, fall back to old calculation
+    const feedbackList = this.getFeedbackForSkill(skillName);
+    
+    // If no feedback available, fall back to old calculation
+    if (!feedbackList || feedbackList.length === 0) {
+      const extractLevel = (level: string): number => {
+        if (!level) return 0;
+        if (level.toUpperCase().startsWith('L')) {
+          return parseInt(level.substring(1), 10) || 0;
+        }
+        const levelMap: { [key: string]: number } = {
+          'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4
+        };
+        return levelMap[level.toUpperCase()] || 0;
       };
-      return levelMap[level.toUpperCase()] || 0;
-    };
 
-    const current = extractLevel(skill.current_expertise);
-    const target = extractLevel(skill.target_expertise);
+      const current = extractLevel(skill.current_expertise);
+      const target = extractLevel(skill.target_expertise);
 
-    if (target === 0) return 0;
+      if (target === 0) return 0;
 
-    let percent = Math.round((current / target) * 100);
+      let percent = Math.round((current / target) * 100);
+      if (percent > 100) percent = 100;
+      if (percent < 0) percent = 0;
+      return percent;
+    }
+
+    // Group feedback by skill category (L1, L2, L3, L4, L5)
+    const feedbackByLevel = new Map<string, ManagerPerformanceFeedback[]>();
+    feedbackList.forEach(feedback => {
+      const skillCategory = feedback.skill_category || 'Unknown';
+      if (skillCategory.startsWith('L') && ['L1', 'L2', 'L3', 'L4', 'L5'].includes(skillCategory)) {
+        if (!feedbackByLevel.has(skillCategory)) {
+          feedbackByLevel.set(skillCategory, []);
+        }
+        feedbackByLevel.get(skillCategory)!.push(feedback);
+      }
+    });
+
+    // Sort feedback within each level by updated_at (most recent first)
+    feedbackByLevel.forEach((feedbackList, level) => {
+      feedbackList.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+    });
+
+    // Get latest overall_performance for each level (L1-L5)
+    const performanceScores: number[] = [];
+    const levels = ['L1', 'L2', 'L3', 'L4', 'L5'];
+    
+    levels.forEach(level => {
+      const levelFeedback = feedbackByLevel.get(level);
+      if (levelFeedback && levelFeedback.length > 0) {
+        const latestFeedback = levelFeedback[0];
+        if (latestFeedback.overall_performance != null && latestFeedback.overall_performance > 0) {
+          performanceScores.push(latestFeedback.overall_performance);
+        }
+      }
+    });
+
+    // If no performance scores found, fall back to old calculation
+    if (performanceScores.length === 0) {
+      const extractLevel = (level: string): number => {
+        if (!level) return 0;
+        if (level.toUpperCase().startsWith('L')) {
+          return parseInt(level.substring(1), 10) || 0;
+        }
+        const levelMap: { [key: string]: number } = {
+          'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4
+        };
+        return levelMap[level.toUpperCase()] || 0;
+      };
+
+      const current = extractLevel(skill.current_expertise);
+      const target = extractLevel(skill.target_expertise);
+
+      if (target === 0) return 0;
+
+      let percent = Math.round((current / target) * 100);
+      if (percent > 100) percent = 100;
+      if (percent < 0) percent = 0;
+      return percent;
+    }
+
+    // Calculate average of overall performance scores
+    const sum = performanceScores.reduce((acc, score) => acc + score, 0);
+    const average = sum / performanceScores.length;
+
+    // Convert to percentage: (average/5) * 100
+    // Since overall_performance is on a 1-5 scale, we convert it to percentage
+    let percent = Math.round((average / 5) * 100);
     if (percent > 100) percent = 100;
     if (percent < 0) percent = 0;
     return percent;
@@ -2504,6 +2851,140 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       error: () => {
         this.sharedFeedback.set(trainingId, false);
         this.feedbackSharedBy.delete(trainingId);
+      }
+    });
+  }
+
+  fetchTrainingCandidates(trainingId: number): void {
+    const token = this.authService.getToken();
+    if (!token) return;
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    
+    this.http.get<{employee_empid: string, employee_name: string, attended: boolean}[]>(
+      this.apiService.getTrainingCandidatesUrl(trainingId), 
+      { headers }
+    ).subscribe({
+      next: (candidates) => {
+        this.trainingCandidates.set(trainingId, candidates);
+      },
+      error: (err) => {
+        // If 401, token expired - redirect to login
+        if (err.status === 401) {
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else if (err.status !== 403) {
+          // If 403, user is not the trainer - that's okay, just don't show candidates
+          console.error('Failed to fetch training candidates:', err);
+        }
+        this.trainingCandidates.set(trainingId, []);
+      }
+    });
+  }
+
+  getTrainingCandidates(trainingId: number): {employee_empid: string, employee_name: string, attended: boolean}[] {
+    return this.trainingCandidates.get(trainingId) || [];
+  }
+
+  openAttendanceModal(trainingId: number): void {
+    this.selectedTrainingForAttendance = trainingId;
+    const candidates = this.getTrainingCandidates(trainingId);
+    // Create a copy for editing
+    this.attendanceCandidates = candidates.map(c => ({ ...c }));
+    this.showAttendanceModal = true;
+  }
+
+  closeAttendanceModal(): void {
+    this.showAttendanceModal = false;
+    this.selectedTrainingForAttendance = null;
+    this.attendanceCandidates = [];
+  }
+
+  toggleCandidateAttendance(index: number): void {
+    this.attendanceCandidates[index].attended = !this.attendanceCandidates[index].attended;
+  }
+
+  getAttendedCount(): number {
+    return this.attendanceCandidates.filter(c => c.attended).length;
+  }
+
+  getTotalCandidatesCount(): number {
+    return this.attendanceCandidates.length;
+  }
+
+  canMarkAttendance(): boolean {
+    return !this.isMarkingAttendance && this.getAttendedCount() > 0;
+  }
+
+  markAttendance(): void {
+    if (!this.selectedTrainingForAttendance) return;
+    
+    const token = this.authService.getToken();
+    if (!token) {
+      this.toastService.warning('Authentication token missing. Please login again.');
+      return;
+    }
+    
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const attendedEmpids = this.attendanceCandidates
+      .filter(c => c.attended)
+      .map(c => c.employee_empid);
+    
+    this.isMarkingAttendance = true;
+    
+    // Get attended candidate names for better success message
+    const attendedNames = this.attendanceCandidates
+      .filter(c => c.attended)
+      .map(c => c.employee_name)
+      .join(', ');
+    
+    this.http.post(
+      this.apiService.markTrainingAttendanceUrl(this.selectedTrainingForAttendance),
+      { candidate_empids: attendedEmpids },
+      { headers }
+    ).subscribe({
+      next: (response: any) => {
+        // Show immediate success popup with detailed information
+        // Find the training object from the ID
+        const training = this.allTrainings.find(t => t.id === this.selectedTrainingForAttendance);
+        const trainingName = training?.training_name || 'Training';
+        const attendedCount = response.attended_count || attendedEmpids.length;
+        const totalCount = response.total_assigned || this.attendanceCandidates.length;
+        const absentCount = totalCount - attendedCount;
+        
+        // Prepare data for success popup
+        this.attendanceSuccessData = {
+          trainingName: trainingName,
+          attendedCount: attendedCount,
+          absentCount: absentCount,
+          totalCount: totalCount,
+          attendedNames: attendedNames || ''
+        };
+        
+        // Close attendance modal first
+        this.closeAttendanceModal();
+        
+        // Show success popup in the center
+        this.showAttendanceSuccessPopup = true;
+        
+        // Refresh candidates list immediately
+        this.fetchTrainingCandidates(this.selectedTrainingForAttendance!);
+      },
+      error: (err) => {
+        console.error('Failed to mark attendance:', err);
+        if (err.status === 401) {
+          this.toastService.error('Your session has expired. Please log in again.');
+          this.authService.logout();
+          this.router.navigate(['/login']);
+        } else if (err.status === 403) {
+          this.toastService.warning('Only the trainer of this training can mark attendance.');
+        } else if (err.status === 400) {
+          this.toastService.warning(err.error?.detail || 'Invalid request. Please check the selected candidates.');
+        } else {
+          this.toastService.warning('Failed to mark attendance. Please try again.');
+        }
+      },
+      complete: () => {
+        this.isMarkingAttendance = false;
       }
     });
   }

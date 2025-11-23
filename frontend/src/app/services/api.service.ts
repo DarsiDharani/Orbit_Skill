@@ -68,6 +68,14 @@ export class ApiService {
     return this.getUrl('/assignments/manager/team');
   }
 
+  getTrainingCandidatesUrl(trainingId: number): string {
+    return this.getUrl(`/assignments/training/${trainingId}/candidates`);
+  }
+
+  markTrainingAttendanceUrl(trainingId: number): string {
+    return this.getUrl(`/assignments/training/${trainingId}/attendance`);
+  }
+
   // Training request endpoints
   get trainingRequestsUrl(): string {
     return this.getUrl('/training-requests/');

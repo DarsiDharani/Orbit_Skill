@@ -121,6 +121,17 @@ class TrainingAssignment(Base):
     # Match existing DB column name 'assignment_date' (timestamp)
     assignment_date = Column(DateTime, default=datetime.utcnow)
 
+class TrainingAttendance(Base):
+    __tablename__ = 'training_attendance'
+    id = Column(Integer, primary_key=True, index=True)
+    training_id = Column(Integer, ForeignKey('training_details.id'), nullable=False)
+    employee_empid = Column(String, ForeignKey('users.username'), nullable=False)
+    attended = Column(Boolean, default=False, nullable=False)
+    marked_at = Column(DateTime, default=datetime.utcnow)
+    # Relationships
+    training = relationship("TrainingDetail")
+    employee = relationship("User", foreign_keys=[employee_empid])
+
 class TrainingRequest(Base):
     __tablename__ = 'training_requests'
     id = Column(Integer, primary_key=True, index=True)

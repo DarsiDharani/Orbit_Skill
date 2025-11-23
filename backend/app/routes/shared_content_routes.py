@@ -225,7 +225,13 @@ async def share_assignment(
         await db.refresh(existing_assignment)
         
         # Parse and return
-        questions_data = json.loads(existing_assignment.assignment_data)
+        try:
+            questions_data = json.loads(existing_assignment.assignment_data)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to parse assignment data: {str(e)}"
+            )
         return SharedAssignmentResponse(
             id=existing_assignment.id,
             training_id=existing_assignment.training_id,
@@ -250,7 +256,13 @@ async def share_assignment(
         await db.refresh(new_assignment)
 
         # Parse and return
-        questions_data = json.loads(new_assignment.assignment_data)
+        try:
+            questions_data = json.loads(new_assignment.assignment_data)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to parse assignment data: {str(e)}"
+            )
         return SharedAssignmentResponse(
             id=new_assignment.id,
             training_id=new_assignment.training_id,
@@ -434,6 +446,7 @@ async def get_shared_assignment(
 ):
     """
     Allows engineers to retrieve shared assignment for a training assigned to them.
+    Only accessible if the employee attended the training (attendance was marked).
     """
     employee_username = current_user.get("username")
     if not employee_username:
@@ -454,6 +467,21 @@ async def get_shared_assignment(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access assignments for trainings assigned to you"
+        )
+
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access assignments for trainings you attended. Please contact your trainer if you believe this is an error."
         )
 
     # Get the shared assignment
@@ -487,6 +515,7 @@ async def get_shared_feedback(
 ):
     """
     Allows engineers to retrieve shared feedback form for a training assigned to them.
+    Only accessible if the employee attended the training (attendance was marked).
     """
     employee_username = current_user.get("username")
     if not employee_username:
@@ -507,6 +536,21 @@ async def get_shared_feedback(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access feedback for trainings assigned to you"
+        )
+
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access feedback for trainings you attended. Please contact your trainer if you believe this is an error."
         )
 
     # Get the shared feedback
@@ -648,7 +692,13 @@ async def get_shared_assignment_for_trainer(
         return None
 
     # Parse and return
-    questions_data = json.loads(shared_assignment.assignment_data)
+    try:
+        questions_data = json.loads(shared_assignment.assignment_data)
+    except (json.JSONDecodeError, TypeError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to parse assignment data: {str(e)}"
+        )
     return SharedAssignmentResponse(
         id=shared_assignment.id,
         training_id=shared_assignment.training_id,
@@ -847,6 +897,21 @@ async def submit_assignment(
             detail="You can only submit assignments for trainings assigned to you"
         )
 
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == submission_data.training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only submit assignments for trainings you attended. Please contact your trainer if you believe this is an error."
+        )
+
     # Get the shared assignment
     shared_stmt = select(models.SharedAssignment).where(
         models.SharedAssignment.id == submission_data.shared_assignment_id,
@@ -968,6 +1033,21 @@ async def get_assignment_result(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access results for trainings assigned to you"
+        )
+
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access results for trainings you attended. Please contact your trainer if you believe this is an error."
         )
 
     # Get the shared assignment
@@ -1093,6 +1173,21 @@ async def submit_feedback(
             detail="You can only submit feedback for trainings assigned to you"
         )
 
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == submission_data.training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only submit feedback for trainings you attended. Please contact your trainer if you believe this is an error."
+        )
+
     # Get the shared feedback
     shared_stmt = select(models.SharedFeedback).where(
         models.SharedFeedback.id == submission_data.shared_feedback_id,
@@ -1182,6 +1277,21 @@ async def get_feedback_submission_result(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access feedback results for trainings assigned to you"
+        )
+
+    # Verify the employee attended the training
+    attendance_stmt = select(models.TrainingAttendance).where(
+        models.TrainingAttendance.training_id == training_id,
+        models.TrainingAttendance.employee_empid == employee_username,
+        models.TrainingAttendance.attended == True
+    )
+    attendance_result = await db.execute(attendance_stmt)
+    attendance = attendance_result.scalar_one_or_none()
+
+    if not attendance:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access feedback results for trainings you attended. Please contact your trainer if you believe this is an error."
         )
 
     # Get the shared feedback
